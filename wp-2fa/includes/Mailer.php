@@ -2,10 +2,10 @@
 /**
  * Sends the one-time code via Symfony Mailer (not wp_mail).
  *
- * @package WP2FA
+ * @package WPDualCheck
  */
 
-namespace WP2FA;
+namespace WPDualCheck;
 
 use Symfony\Component\Mailer\Mailer as SymfonyMailer;
 use Symfony\Component\Mailer\Transport;
@@ -18,34 +18,34 @@ final class Mailer {
 		$dsn = Config::mailer_dsn();
 		if ( '' === $dsn ) {
 			return new \WP_Error(
-				'wp2fa_no_dsn',
-				__( 'WP 2FA is not configured: set WP2FA_MAILER_DSN.', 'wp-2fa' )
+				'wdc_no_dsn',
+				__( 'WP Dual Check is not configured: set WP_DUAL_CHECK_MAILER_DSN (or legacy WP2FA_MAILER_DSN).', 'wp-dual-check' )
 			);
 		}
 
 		$to = self::resolve_recipient_email( $user );
 		if ( '' === $to || ! is_email( $to ) ) {
 			return new \WP_Error(
-				'wp2fa_bad_email',
-				__( 'Your account has no valid email address for the login code.', 'wp-2fa' )
+				'wdc_bad_email',
+				__( 'Your account has no valid email address for the login code.', 'wp-dual-check' )
 			);
 		}
 
 		$subject = (string) apply_filters(
-			'wp2fa_email_subject',
+			'wp_dual_check_email_subject',
 			sprintf(
 				/* translators: %s: site name */
-				__( 'Your login code for %s', 'wp-2fa' ),
+				__( 'Your login code for %s', 'wp-dual-check' ),
 				wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES )
 			),
 			$user
 		);
 
 		$body = (string) apply_filters(
-			'wp2fa_email_body',
+			'wp_dual_check_email_body',
 			sprintf(
 				/* translators: 1: numeric code, 2: expiry minutes */
-				__( "Your login code is: %1\$s\n\nIt expires in about %2\$d minutes.", 'wp-2fa' ),
+				__( "Your login code is: %1\$s\n\nIt expires in about %2\$d minutes.", 'wp-dual-check' ),
 				$plain_code,
 				(int) ceil( Config::code_ttl_seconds() / 60 )
 			),
@@ -67,11 +67,11 @@ final class Mailer {
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
-				error_log( 'WP2FA mail error: ' . $e->getMessage() );
+				error_log( 'WP Dual Check mail error: ' . $e->getMessage() );
 			}
 			return new \WP_Error(
-				'wp2fa_send_failed',
-				__( 'Could not send the login code. Try again later or contact an administrator.', 'wp-2fa' )
+				'wdc_send_failed',
+				__( 'Could not send the login code. Try again later or contact an administrator.', 'wp-dual-check' )
 			);
 		}
 
@@ -79,9 +79,13 @@ final class Mailer {
 	}
 
 	private static function resolve_recipient_email( \WP_User $user ): string {
-		$override = get_user_meta( $user->ID, 'wp2fa_delivery_email', true );
+		$override = get_user_meta( $user->ID, User_Settings::META_DELIVERY_EMAIL, true );
 		if ( is_string( $override ) && '' !== $override && is_email( $override ) ) {
 			return $override;
+		}
+		$legacy = get_user_meta( $user->ID, 'wp2fa_delivery_email', true );
+		if ( is_string( $legacy ) && '' !== $legacy && is_email( $legacy ) ) {
+			return $legacy;
 		}
 		return (string) $user->user_email;
 	}

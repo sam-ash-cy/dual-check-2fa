@@ -1,26 +1,26 @@
 <?php
 /**
- * Secrets: wp-config constants, getenv(), optional .env. Everything else: Settings → WP 2FA.
+ * Secrets: wp-config constants, getenv(), optional .env. Everything else: Settings → WP Dual Check.
  *
- * @package WP2FA
+ * @package WPDualCheck
  */
 
-namespace WP2FA;
+namespace WPDualCheck;
 
 use Dotenv\Dotenv;
 
 final class Config {
 
 	public static function maybe_load_dotenv(): void {
-		$env_file = WP2FA_PATH . '.env';
+		$env_file = WP_DUAL_CHECK_PATH . '.env';
 		if ( ! is_readable( $env_file ) ) {
 			return;
 		}
-		Dotenv::createImmutable( WP2FA_PATH )->safeLoad();
+		Dotenv::createImmutable( WP_DUAL_CHECK_PATH )->safeLoad();
 	}
 
 	/**
-	 * Sensitive values only (DSN, optional HMAC secret). Not read from wp_options.
+	 * Sensitive string from env/constants only (not wp_options).
 	 */
 	public static function get_secret_string( string $name, string $default = '' ): string {
 		if ( defined( $name ) ) {
@@ -36,21 +36,28 @@ final class Config {
 	}
 
 	public static function mailer_dsn(): string {
+		$dsn = self::get_secret_string( 'WP_DUAL_CHECK_MAILER_DSN', '' );
+		if ( '' !== $dsn ) {
+			return $dsn;
+		}
 		return self::get_secret_string( 'WP2FA_MAILER_DSN', '' );
 	}
 
 	/**
-	 * Optional explicit secret for code hashing (multi-server). If unset, derived from AUTH_KEY / salt.
+	 * Optional explicit secret for code hashing (multi-server). Legacy WP2FA_SECRET still read if unset.
 	 */
 	public static function secret_key(): string {
-		$explicit = self::get_secret_string( 'WP2FA_SECRET', '' );
+		$explicit = self::get_secret_string( 'WP_DUAL_CHECK_SECRET', '' );
+		if ( '' === $explicit ) {
+			$explicit = self::get_secret_string( 'WP2FA_SECRET', '' );
+		}
 		if ( '' !== $explicit ) {
 			return $explicit;
 		}
 		if ( defined( 'AUTH_KEY' ) && AUTH_KEY ) {
-			return hash( 'sha256', (string) AUTH_KEY . '|wp2fa', true );
+			return hash( 'sha256', (string) AUTH_KEY . '|wp_dual_check', true );
 		}
-		return hash( 'sha256', wp_salt( 'auth' ) . '|wp2fa', true );
+		return hash( 'sha256', wp_salt( 'auth' ) . '|wp_dual_check', true );
 	}
 
 	public static function code_ttl_seconds(): int {

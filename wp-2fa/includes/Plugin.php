@@ -2,10 +2,10 @@
 /**
  * Loads config and registers hooks in a fixed order (see boot).
  *
- * @package WP2FA
+ * @package WPDualCheck
  */
 
-namespace WP2FA;
+namespace WPDualCheck;
 
 final class Plugin {
 

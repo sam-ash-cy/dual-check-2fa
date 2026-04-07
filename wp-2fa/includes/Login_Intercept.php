@@ -2,14 +2,14 @@
 /**
  * Runs after password validation: starts email challenge and redirects, or completes login after code.
  *
- * @package WP2FA
+ * @package WPDualCheck
  */
 
-namespace WP2FA;
+namespace WPDualCheck;
 
 final class Login_Intercept {
 
-	public const QUERY_VAR = 'wp2fa_challenge';
+	public const QUERY_VAR = 'wdc_challenge';
 
 	public static function register(): void {
 		add_filter( 'wp_authenticate_user', array( self::class, 'maybe_start_challenge' ), 30, 2 );
@@ -44,7 +44,7 @@ final class Login_Intercept {
 
 		if ( true !== $sent ) {
 			Pending_Session::delete_by_token( $session['token'] );
-			return $sent instanceof \WP_Error ? $sent : new \WP_Error( 'wp2fa_send_failed', __( 'Could not send login code.', 'wp-2fa' ) );
+			return $sent instanceof \WP_Error ? $sent : new \WP_Error( 'wdc_send_failed', __( 'Could not send login code.', 'wp-dual-check' ) );
 		}
 
 		$url = add_query_arg(
@@ -64,14 +64,14 @@ final class Login_Intercept {
 		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) {
 			return;
 		}
-		if ( empty( $_POST['wp2fa_verify'] ) ) {
+		if ( empty( $_POST['wdc_verify'] ) ) {
 			return;
 		}
 
-		check_admin_referer( 'wp2fa_verify', 'wp2fa_nonce' );
+		check_admin_referer( 'wdc_verify', 'wdc_nonce' );
 
-		$token = isset( $_POST['wp2fa_token'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['wp2fa_token'] ) ) : '';
-		$code  = isset( $_POST['wp2fa_code'] ) ? preg_replace( '/\D/', '', (string) wp_unslash( $_POST['wp2fa_code'] ) ) : '';
+		$token = isset( $_POST['wdc_token'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['wdc_token'] ) ) : '';
+		$code  = isset( $_POST['wdc_code'] ) ? preg_replace( '/\D/', '', (string) wp_unslash( $_POST['wdc_code'] ) ) : '';
 
 		$data = Pending_Session::get_by_token( $token );
 		if ( null === $data ) {
@@ -81,7 +81,7 @@ final class Login_Intercept {
 
 		if ( (int) $data['attempts'] >= Config::max_attempts() ) {
 			Pending_Session::delete_by_token( $token );
-			wp_die( esc_html__( 'Too many attempts. Log in again.', 'wp-2fa' ), 403 );
+			wp_die( esc_html__( 'Too many attempts. Log in again.', 'wp-dual-check' ), 403 );
 		}
 
 		if ( ! Code::verify_plain_against_hash( $code, (string) $data['code_hash'] ) ) {
@@ -91,7 +91,7 @@ final class Login_Intercept {
 				add_query_arg(
 					array(
 						self::QUERY_VAR => rawurlencode( $token ),
-						'wp2fa_error'   => '1',
+						'wdc_error'     => '1',
 					),
 					wp_login_url()
 				)
@@ -124,13 +124,13 @@ final class Login_Intercept {
 		if ( 'POST' !== ( $_SERVER['REQUEST_METHOD'] ?? '' ) ) {
 			return;
 		}
-		if ( empty( $_POST['wp2fa_resend'] ) ) {
+		if ( empty( $_POST['wdc_resend'] ) ) {
 			return;
 		}
 
-		check_admin_referer( 'wp2fa_resend', 'wp2fa_resend_nonce' );
+		check_admin_referer( 'wdc_resend', 'wdc_resend_nonce' );
 
-		$token = isset( $_POST['wp2fa_token'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['wp2fa_token'] ) ) : '';
+		$token = isset( $_POST['wdc_token'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['wdc_token'] ) ) : '';
 		$data  = Pending_Session::get_by_token( $token );
 		if ( null === $data ) {
 			wp_safe_redirect( wp_login_url() );
@@ -143,7 +143,7 @@ final class Login_Intercept {
 				add_query_arg(
 					array(
 						self::QUERY_VAR => rawurlencode( $token ),
-						'wp2fa_wait'    => '1',
+						'wdc_wait'      => '1',
 					),
 					wp_login_url()
 				)
@@ -166,14 +166,14 @@ final class Login_Intercept {
 		$sent = Mailer::send_code_email( $user, $plain );
 		if ( true !== $sent ) {
 			Pending_Session::delete_by_token( $token );
-			wp_die( esc_html( $sent instanceof \WP_Error ? $sent->get_error_message() : __( 'Could not resend code.', 'wp-2fa' ) ) );
+			wp_die( esc_html( $sent instanceof \WP_Error ? $sent->get_error_message() : __( 'Could not resend code.', 'wp-dual-check' ) ) );
 		}
 
 		wp_safe_redirect(
 			add_query_arg(
 				array(
-					self::QUERY_VAR   => rawurlencode( $token ),
-					'wp2fa_resent' => '1',
+					self::QUERY_VAR => rawurlencode( $token ),
+					'wdc_resent'    => '1',
 				),
 				wp_login_url()
 			)
@@ -185,7 +185,7 @@ final class Login_Intercept {
 		if ( empty( $_GET[ self::QUERY_VAR ] ) ) {
 			return;
 		}
-		echo '<style id="wp2fa-hide-login">#loginform{display:none!important;}#wp2fa-challenge{margin-top:1em;}</style>';
+		echo '<style id="wdc-hide-login">#loginform{display:none!important;}#wdc-challenge{margin-top:1em;}</style>';
 	}
 
 	public static function maybe_show_challenge_ui( string $message ): string {
@@ -196,17 +196,17 @@ final class Login_Intercept {
 
 		$data = Pending_Session::get_by_token( $token );
 		if ( null === $data ) {
-			return $message . '<p class="message">' . esc_html__( 'This login challenge expired. Please sign in again.', 'wp-2fa' ) . '</p>';
+			return $message . '<p class="message">' . esc_html__( 'This login challenge expired. Please sign in again.', 'wp-dual-check' ) . '</p>';
 		}
 
-		if ( ! empty( $_GET['wp2fa_error'] ) ) {
-			$message .= '<div id="login_error" class="notice notice-error"><p>' . esc_html__( 'Invalid code. Try again.', 'wp-2fa' ) . '</p></div>';
+		if ( ! empty( $_GET['wdc_error'] ) ) {
+			$message .= '<div id="login_error" class="notice notice-error"><p>' . esc_html__( 'Invalid code. Try again.', 'wp-dual-check' ) . '</p></div>';
 		}
-		if ( ! empty( $_GET['wp2fa_resent'] ) ) {
-			$message .= '<p class="message">' . esc_html__( 'A new code was sent to your email.', 'wp-2fa' ) . '</p>';
+		if ( ! empty( $_GET['wdc_resent'] ) ) {
+			$message .= '<p class="message">' . esc_html__( 'A new code was sent to your email.', 'wp-dual-check' ) . '</p>';
 		}
-		if ( ! empty( $_GET['wp2fa_wait'] ) ) {
-			$message .= '<div id="login_error" class="notice notice-error"><p>' . esc_html__( 'Please wait a minute before resending.', 'wp-2fa' ) . '</p></div>';
+		if ( ! empty( $_GET['wdc_wait'] ) ) {
+			$message .= '<div id="login_error" class="notice notice-error"><p>' . esc_html__( 'Please wait a minute before resending.', 'wp-dual-check' ) . '</p></div>';
 		}
 
 		ob_start();
@@ -217,7 +217,7 @@ final class Login_Intercept {
 				$redirect_field = '<input type="hidden" name="redirect_to" value="' . esc_attr( $rt ) . '" />';
 			}
 		}
-		include WP2FA_PATH . 'templates/challenge-form.php';
+		include WP_DUAL_CHECK_PATH . 'templates/challenge-form.php';
 		$message .= ob_get_clean();
 
 		return $message;

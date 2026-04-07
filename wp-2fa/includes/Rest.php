@@ -1,14 +1,16 @@
 <?php
 /**
  * Optional JSON surface for verify/resend (same transients as the login form).
- * Enable under Settings → WP 2FA (REST API checkbox).
+ * Enable under Settings → WP Dual Check (REST API checkbox).
  *
- * @package WP2FA
+ * @package WPDualCheck
  */
 
-namespace WP2FA;
+namespace WPDualCheck;
 
 final class Rest {
+
+	public const NS = 'dual-check/v1';
 
 	public static function register(): void {
 		if ( ! Config::rest_enabled() ) {
@@ -20,7 +22,7 @@ final class Rest {
 
 	public static function routes(): void {
 		register_rest_route(
-			'wp2fa/v1',
+			self::NS,
 			'/verify',
 			array(
 				'methods'             => 'POST',
@@ -40,7 +42,7 @@ final class Rest {
 		);
 
 		register_rest_route(
-			'wp2fa/v1',
+			self::NS,
 			'/resend',
 			array(
 				'methods'             => 'POST',
@@ -62,24 +64,24 @@ final class Rest {
 
 		$data = Pending_Session::get_by_token( $token );
 		if ( null === $data ) {
-			return new \WP_Error( 'wp2fa_invalid', __( 'Invalid or expired challenge.', 'wp-2fa' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'wdc_invalid', __( 'Invalid or expired challenge.', 'wp-dual-check' ), array( 'status' => 400 ) );
 		}
 
 		if ( (int) $data['attempts'] >= Config::max_attempts() ) {
 			Pending_Session::delete_by_token( $token );
-			return new \WP_Error( 'wp2fa_locked', __( 'Too many attempts.', 'wp-2fa' ), array( 'status' => 403 ) );
+			return new \WP_Error( 'wdc_locked', __( 'Too many attempts.', 'wp-dual-check' ), array( 'status' => 403 ) );
 		}
 
 		if ( ! Code::verify_plain_against_hash( $code, (string) $data['code_hash'] ) ) {
 			$data['attempts'] = (int) $data['attempts'] + 1;
 			Pending_Session::save( $token, $data );
-			return new \WP_Error( 'wp2fa_bad_code', __( 'Invalid code.', 'wp-2fa' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'wdc_bad_code', __( 'Invalid code.', 'wp-dual-check' ), array( 'status' => 400 ) );
 		}
 
 		$user = get_userdata( (int) $data['user_id'] );
 		if ( ! $user instanceof \WP_User ) {
 			Pending_Session::delete_by_token( $token );
-			return new \WP_Error( 'wp2fa_user', __( 'User not found.', 'wp-2fa' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'wdc_user', __( 'User not found.', 'wp-dual-check' ), array( 'status' => 400 ) );
 		}
 
 		Pending_Session::delete_by_token( $token );
@@ -92,7 +94,7 @@ final class Rest {
 
 		return new \WP_REST_Response(
 			array(
-				'success'    => true,
+				'success'  => true,
 				'redirect' => $redirect,
 			),
 			200
@@ -103,20 +105,20 @@ final class Rest {
 		$token = sanitize_text_field( (string) $request->get_param( 'token' ) );
 		$data  = Pending_Session::get_by_token( $token );
 		if ( null === $data ) {
-			return new \WP_Error( 'wp2fa_invalid', __( 'Invalid or expired challenge.', 'wp-2fa' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'wdc_invalid', __( 'Invalid or expired challenge.', 'wp-dual-check' ), array( 'status' => 400 ) );
 		}
 
 		$user_id = (int) $data['user_id'];
 		if ( ! Pending_Session::is_resend_allowed( $user_id ) ) {
-			return new \WP_Error( 'wp2fa_rate', __( 'Please wait before requesting another code.', 'wp-2fa' ), array( 'status' => 429 ) );
+			return new \WP_Error( 'wdc_rate', __( 'Please wait before requesting another code.', 'wp-dual-check' ), array( 'status' => 429 ) );
 		}
 
 		$user = get_userdata( $user_id );
 		if ( ! $user instanceof \WP_User ) {
-			return new \WP_Error( 'wp2fa_user', __( 'User not found.', 'wp-2fa' ), array( 'status' => 400 ) );
+			return new \WP_Error( 'wdc_user', __( 'User not found.', 'wp-dual-check' ), array( 'status' => 400 ) );
 		}
 
-		$plain = Code::generate_plain();
+		$plain             = Code::generate_plain();
 		$data['code_hash'] = Code::hash_plain( $plain );
 		$data['attempts']  = 0;
 		Pending_Session::save( $token, $data );
@@ -124,7 +126,7 @@ final class Rest {
 
 		$sent = Mailer::send_code_email( $user, $plain );
 		if ( true !== $sent ) {
-			return $sent instanceof \WP_Error ? $sent : new \WP_Error( 'wp2fa_send', __( 'Send failed.', 'wp-2fa' ), array( 'status' => 500 ) );
+			return $sent instanceof \WP_Error ? $sent : new \WP_Error( 'wdc_send', __( 'Send failed.', 'wp-dual-check' ), array( 'status' => 500 ) );
 		}
 
 		return new \WP_REST_Response( array( 'success' => true ), 200 );

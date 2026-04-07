@@ -2,15 +2,14 @@
 /**
  * One-time numeric codes: generate, hash for storage, timing-safe verify.
  *
- * @package WP2FA
+ * @package WPDualCheck
  */
 
-namespace WP2FA;
+namespace WPDualCheck;
 
 final class Code {
 
 	public static function generate_plain(): string {
-		// wp_rand is available early; 6 digits, avoid leading-zero loss by zero-padding.
 		return str_pad( (string) wp_rand( 0, 999999 ), 6, '0', STR_PAD_LEFT );
 	}
 

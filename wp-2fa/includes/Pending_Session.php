@@ -2,17 +2,17 @@
 /**
  * Pending login state in transients (opaque token in URL, hashed code only in DB).
  *
- * @package WP2FA
+ * @package WPDualCheck
  */
 
-namespace WP2FA;
+namespace WPDualCheck;
 
 final class Pending_Session {
 
-	private const PREFIX = 'wp2fa_p_';
+	private const PREFIX = 'wdc_p_';
 
 	/**
-	 * @return array{token:string,user_id:int,code_hash:string,attempts:int,remember:bool,redirect_to:string}|null
+	 * @return array{token:string,user_id:int,code_hash:string,attempts:int,remember:bool,redirect_to:string,plain_code:string}
 	 */
 	public static function start_pending_challenge( \WP_User $user, bool $remember, string $redirect_to ): array {
 		$plain = Code::generate_plain();
