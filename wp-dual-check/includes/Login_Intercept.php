@@ -31,7 +31,7 @@ final class Login_Intercept {
 			return $user;
 		}
 
-		if ( ! User_Settings::is_2fa_enabled_for_user( $user->ID ) ) {
+		if ( empty( Admin_Settings::merged()['require_all_logins'] ) ) {
 			return $user;
 		}
 

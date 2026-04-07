@@ -14,12 +14,13 @@ final class Admin_Settings {
 	public const OPTION_GROUP = 'wp_dual_check_settings_group';
 
 	public const DEFAULTS = array(
-		'code_ttl'        => 600,
-		'max_attempts'    => 5,
-		'from_email'      => '',
-		'from_name'       => '',
-		'rest_enabled'    => false,
-		'resend_cooldown' => 60,
+		'require_all_logins' => false,
+		'code_ttl'           => 600,
+		'max_attempts'       => 5,
+		'from_email'         => '',
+		'from_name'          => '',
+		'rest_enabled'       => false,
+		'resend_cooldown'    => 60,
 	);
 
 	public static function register(): void {
@@ -54,9 +55,18 @@ final class Admin_Settings {
 			'wdc_main',
 			__( 'Email challenge', 'wp-dual-check' ),
 			static function () {
-				echo '<p>' . esc_html__( 'Sensitive values (SMTP credentials and optional signing secret) belong in environment variables or wp-config.php, not here.', 'wp-dual-check' ) . '</p>';
+				echo '<p>' . esc_html__( 'When enabled below, every successful password login goes to the email code step before access is granted (wp-login.php, wp-admin, and any flow using WordPress authentication).', 'wp-dual-check' ) . '</p>';
+				echo '<p>' . esc_html__( 'SMTP credentials stay in environment variables or wp-config.php, not here.', 'wp-dual-check' ) . '</p>';
 			},
 			self::PAGE_SLUG
+		);
+
+		add_settings_field(
+			'wdc_require_all_logins',
+			__( 'All users', 'wp-dual-check' ),
+			array( self::class, 'field_require_all_logins' ),
+			self::PAGE_SLUG,
+			'wdc_main'
 		);
 
 		add_settings_field(
@@ -130,17 +140,18 @@ final class Admin_Settings {
 		$input = is_array( $input ) ? $input : array();
 
 		return array(
-			'code_ttl'        => isset( $input['code_ttl'] ) ? max( 60, min( 86400, (int) $input['code_ttl'] ) ) : (int) $prev['code_ttl'],
-			'max_attempts'    => isset( $input['max_attempts'] ) ? max( 1, min( 50, (int) $input['max_attempts'] ) ) : (int) $prev['max_attempts'],
-			'resend_cooldown' => isset( $input['resend_cooldown'] ) ? max( 15, min( 600, (int) $input['resend_cooldown'] ) ) : (int) $prev['resend_cooldown'],
-			'from_email'      => isset( $input['from_email'] ) ? sanitize_email( (string) $input['from_email'] ) : '',
-			'from_name'       => isset( $input['from_name'] ) ? sanitize_text_field( (string) $input['from_name'] ) : '',
-			'rest_enabled'    => ! empty( $input['rest_enabled'] ),
+			'require_all_logins' => ! empty( $input['require_all_logins'] ),
+			'code_ttl'           => isset( $input['code_ttl'] ) ? max( 60, min( 86400, (int) $input['code_ttl'] ) ) : (int) $prev['code_ttl'],
+			'max_attempts'       => isset( $input['max_attempts'] ) ? max( 1, min( 50, (int) $input['max_attempts'] ) ) : (int) $prev['max_attempts'],
+			'resend_cooldown'    => isset( $input['resend_cooldown'] ) ? max( 15, min( 600, (int) $input['resend_cooldown'] ) ) : (int) $prev['resend_cooldown'],
+			'from_email'         => isset( $input['from_email'] ) ? sanitize_email( (string) $input['from_email'] ) : '',
+			'from_name'          => isset( $input['from_name'] ) ? sanitize_text_field( (string) $input['from_name'] ) : '',
+			'rest_enabled'       => ! empty( $input['rest_enabled'] ),
 		);
 	}
 
 	/**
-	 * @return array{code_ttl:int,max_attempts:int,from_email:string,from_name:string,rest_enabled:bool,resend_cooldown:int}
+	 * @return array{require_all_logins:bool,code_ttl:int,max_attempts:int,from_email:string,from_name:string,rest_enabled:bool,resend_cooldown:int}
 	 */
 	public static function merged(): array {
 		$stored = get_option( self::OPTION_KEY );
@@ -161,6 +172,11 @@ final class Admin_Settings {
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+			<?php
+			if ( isset( $_GET['settings-updated'] ) && 'true' === sanitize_text_field( wp_unslash( (string) $_GET['settings-updated'] ) ) ) {
+				echo '<div id="wdc-settings-saved" class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'wp-dual-check' ) . '</p></div>';
+			}
+			?>
 			<form action="options.php" method="post">
 				<?php
 				settings_fields( self::OPTION_GROUP );
@@ -170,6 +186,14 @@ final class Admin_Settings {
 			</form>
 		</div>
 		<?php
+	}
+
+	public static function field_require_all_logins(): void {
+		$on = ! empty( self::merged()['require_all_logins'] );
+		echo '<label><input type="checkbox" name="' . esc_attr( self::OPTION_KEY ) . '[require_all_logins]" value="1" ' . checked( $on, true, false ) . ' /> ';
+		esc_html_e( 'Require email verification code for every user after a correct password (all logins).', 'wp-dual-check' );
+		echo '</label>';
+		echo '<p class="description">' . esc_html__( 'Applies to administrators, editors, subscribers—anyone authenticating through WordPress.', 'wp-dual-check' ) . '</p>';
 	}
 
 	public static function field_code_ttl(): void {

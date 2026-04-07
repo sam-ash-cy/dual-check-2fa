@@ -1,6 +1,6 @@
 # WP Dual Check login flow
 
-1. **`Login_Intercept::maybe_start_challenge`** runs on `wp_authenticate_user` after the password is valid. If the user has meta `wp_dual_check_enabled` (or legacy `wp2fa_enabled`), it creates a **pending session** (transient), emails a **6-digit code** (hashed in the transient), then redirects to `wp-login.php?wdc_challenge=TOKEN`.
+1. **`Login_Intercept::maybe_start_challenge`** runs on `wp_authenticate_user` after the password is valid. If **`require_all_logins`** is enabled in **WP Dual Check** settings, it creates a **pending session** (transient), emails a **6-digit code** (hashed in the transient), then redirects to `wp-login.php?wdc_challenge=TOKEN`.
 
 2. **`login_message`** renders **`templates/challenge-form.php`**: verify and resend forms (`wdc_*` fields).
 

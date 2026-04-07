@@ -9,7 +9,7 @@ Email-based second step after WordPress accepts your password. Pending state and
 - Run Composer inside this folder:
 
 ```bash
-cd wp-2fa
+cd wp-dual-check
 composer install
 ```
 
@@ -34,11 +34,14 @@ define( 'WP_DUAL_CHECK_MAILER_DSN', 'smtp://user:pass@mail.example.com:587' );
 
 ### Everything else (wp-admin)
 
-Use the **WP Dual Check** item in the admin sidebar to change expiry, attempts, resend cooldown, from name/email, and REST.
+Open **WP Dual Check** in the admin sidebar:
 
-## Enabling for a user
+1. Turn on **Require email verification code for every user after a correct password (all logins)** so **every** WordPress login (including `wp-admin`) must complete the email code step.
+2. Adjust expiry, attempts, resend cooldown, from name/email, and REST as needed.
 
-Profile: **Email two-factor login (WP Dual Check)** → enable **Email dual check**. Optional delivery email overrides `user_email`.
+### Optional: different inbox per user
+
+Under **Users → Profile**, users with permission can set **Login code delivery email** if codes should not go to their normal account email.
 
 ## REST (optional)
 
