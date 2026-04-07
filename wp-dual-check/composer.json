@@ -1,5 +1,5 @@
 {
-	"name": "wp-dual-check",
+	"name": "sa/wp-dual-check",
 	"description": "WP Dual Check — email second step after password (WordPress plugin).",
 	"type": "wordpress-plugin",
 	"license": "GPL-2.0-or-later",

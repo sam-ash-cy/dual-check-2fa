@@ -1,6 +1,6 @@
 <?php
 /**
- * Settings → WP Dual Check: TTL, attempts, mail identity, REST, resend cooldown (secrets stay in ENV).
+ * Top-level admin menu: TTL, attempts, mail identity, REST, resend cooldown (secrets stay in ENV).
  *
  * @package WPDualCheck
  */
@@ -28,12 +28,14 @@ final class Admin_Settings {
 	}
 
 	public static function add_menu(): void {
-		add_options_page(
+		add_menu_page(
 			__( 'WP Dual Check', 'wp-dual-check' ),
 			__( 'WP Dual Check', 'wp-dual-check' ),
 			'manage_options',
 			self::PAGE_SLUG,
-			array( self::class, 'render_page' )
+			array( self::class, 'render_page' ),
+			'dashicons-shield',
+			80
 		);
 	}
 

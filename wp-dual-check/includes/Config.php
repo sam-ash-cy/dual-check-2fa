@@ -1,6 +1,6 @@
 <?php
 /**
- * Secrets: wp-config constants, getenv(), optional .env. Everything else: Settings → WP Dual Check.
+ * Secrets: wp-config constants, getenv(), optional .env. Everything else: WP Dual Check admin menu.
  *
  * @package WPDualCheck
  */

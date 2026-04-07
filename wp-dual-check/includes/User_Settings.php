@@ -48,7 +48,7 @@ final class User_Settings {
 						<?php esc_html_e( 'Require a one-time code sent to email after my password is accepted.', 'wp-dual-check' ); ?>
 					</label>
 					<p class="description">
-						<?php esc_html_e( 'The site must have WP_DUAL_CHECK_MAILER_DSN set in the environment (Settings → WP Dual Check shows status).', 'wp-dual-check' ); ?>
+						<?php esc_html_e( 'The site must have WP_DUAL_CHECK_MAILER_DSN set in the environment (WP Dual Check admin menu shows status).', 'wp-dual-check' ); ?>
 					</p>
 				</td>
 			</tr>

@@ -34,7 +34,7 @@ define( 'WP_DUAL_CHECK_MAILER_DSN', 'smtp://user:pass@mail.example.com:587' );
 
 ### Everything else (wp-admin)
 
-Under **Settings → WP Dual Check** you can change expiry, attempts, resend cooldown, from name/email, and REST.
+Use the **WP Dual Check** item in the admin sidebar to change expiry, attempts, resend cooldown, from name/email, and REST.
 
 ## Enabling for a user
 
@@ -42,7 +42,7 @@ Profile: **Email two-factor login (WP Dual Check)** → enable **Email dual chec
 
 ## REST (optional)
 
-When enabled in settings:
+When enabled in the WP Dual Check admin screen:
 
 - `POST /wp-json/dual-check/v1/verify` — body: `token`, `code`
 - `POST /wp-json/dual-check/v1/resend` — body: `token`

@@ -1,7 +1,7 @@
 <?php
 /**
  * Optional JSON surface for verify/resend (same transients as the login form).
- * Enable under Settings → WP Dual Check (REST API checkbox).
+ * Enable on the WP Dual Check admin screen (REST API checkbox).
  *
  * @package WPDualCheck
  */
