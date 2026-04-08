@@ -11,7 +11,8 @@ final class Admin_Settings {
 
 	public const OPTION_KEY   = 'wp_dual_check_settings';
 	public const PAGE_SLUG    = 'wp-dual-check';
-	public const PAGE_MAIL_PROVIDERS = 'wp-dual-check-mail-providers';
+	public const PAGE_EMAIL_TEMPLATE = 'wp-dual-check-email-template';
+	public const PAGE_MAIL_PROVIDERS  = 'wp-dual-check-mail-providers';
 	public const OPTION_GROUP = 'wp_dual_check_settings_group';
 
 	/**
@@ -30,6 +31,7 @@ final class Admin_Settings {
 	public const DEFAULTS = array(
 		'require_all_logins'       => false,
 		'code_ttl'                 => 600,
+		'code_length'              => 6,
 		'max_attempts'             => 5,
 		'from_email'               => '',
 		'from_name'                => '',
@@ -46,12 +48,54 @@ final class Admin_Settings {
 		'api_postmark_token'       => '',
 		'api_gmail_user'           => '',
 		'api_gmail_app_password'   => '',
+		'email_subject_template'   => 'Your login code for {site_name}',
+		'email_format'             => Email_Template::FORMAT_MULTIPART,
+		'email_accent_color'       => '#2271b1',
+		'email_background_color'   => '#f0f0f1',
+		'email_header_text'        => '',
+		'email_header_image_url'   => '',
+		'email_header_width_px'    => 600,
+		'email_footer_image_url'   => '',
+		'email_footer_width_px'    => 600,
+		'email_container_max_width_px' => 600,
+		'email_footer_text'        => '',
+		'email_body_html'          => '',
+		'email_body_text'          => "Hello {user_name},\n\nYour login code is: {code}\n\nIt expires in about {expiry_minutes} minutes.\n\nIP: {ip_address}\nTime: {login_time}",
 	);
 
 	public static function register(): void {
 		add_action( 'admin_menu', array( self::class, 'add_menu' ) );
 		add_action( 'admin_init', array( self::class, 'register_settings' ) );
+		add_action( 'admin_enqueue_scripts', array( self::class, 'enqueue_email_template_assets' ) );
 		add_action( 'admin_post_wp_dual_check_send_test_mail', array( self::class, 'handle_send_test_mail' ) );
+	}
+
+	public static function enqueue_email_template_assets( string $hook ): void {
+		if ( 'wp-dual-check_page_' . self::PAGE_EMAIL_TEMPLATE !== $hook ) {
+			return;
+		}
+		wp_enqueue_media();
+		wp_enqueue_style(
+			'wdc-email-template',
+			WP_DUAL_CHECK_URL . 'assets/admin-email-template.css',
+			array(),
+			WP_DUAL_CHECK_VERSION
+		);
+		wp_enqueue_script(
+			'wdc-email-template',
+			WP_DUAL_CHECK_URL . 'assets/admin-email-template.js',
+			array( 'jquery', 'media-editor' ),
+			WP_DUAL_CHECK_VERSION,
+			true
+		);
+		wp_localize_script(
+			'wdc-email-template',
+			'wdcEmailTpl',
+			array(
+				'frameTitle'  => __( 'Choose image', 'wp-dual-check' ),
+				'frameButton' => __( 'Use this image', 'wp-dual-check' ),
+			)
+		);
 	}
 
 	public static function add_menu(): void {
@@ -72,6 +116,14 @@ final class Admin_Settings {
 			'manage_options',
 			self::PAGE_SLUG,
 			array( self::class, 'render_page' )
+		);
+		add_submenu_page(
+			self::PAGE_SLUG,
+			__( 'Email template', 'wp-dual-check' ),
+			__( 'Email template', 'wp-dual-check' ),
+			'manage_options',
+			self::PAGE_EMAIL_TEMPLATE,
+			array( self::class, 'render_page_email_template' )
 		);
 		add_submenu_page(
 			self::PAGE_SLUG,
@@ -120,6 +172,13 @@ final class Admin_Settings {
 			'wdc_main'
 		);
 		add_settings_field(
+			'wdc_code_length',
+			__( 'Code length (digits)', 'wp-dual-check' ),
+			array( self::class, 'field_code_length' ),
+			self::PAGE_SLUG,
+			'wdc_main'
+		);
+		add_settings_field(
 			'wdc_max_attempts',
 			__( 'Max wrong code attempts', 'wp-dual-check' ),
 			array( self::class, 'field_max_attempts' ),
@@ -156,6 +215,7 @@ final class Admin_Settings {
 		);
 
 		self::register_provider_pages();
+		self::register_email_template_page();
 
 		add_settings_section(
 			'wdc_diagnostics',
@@ -220,6 +280,59 @@ final class Admin_Settings {
 		add_settings_field( 'wdc_api_gmail', __( 'Credentials', 'wp-dual-check' ), array( self::class, 'field_api_gmail' ), $page, 'wdc_gmail' );
 	}
 
+	private static function register_email_template_page(): void {
+		$p = self::PAGE_EMAIL_TEMPLATE;
+
+		add_settings_section(
+			'wdc_email_subject',
+			__( 'Subject & format', 'wp-dual-check' ),
+			static function (): void {
+				echo '<p>' . esc_html__( 'The subject is sent as plain text (any HTML is removed).', 'wp-dual-check' ) . '</p>';
+				echo '<p><strong>' . esc_html__( 'Placeholders', 'wp-dual-check' ) . '</strong> — '
+					. esc_html__( 'use in the subject, plain-text body, and HTML body:', 'wp-dual-check' ) . '</p>';
+				echo '<ul style="list-style:disc;padding-left:1.25em;">';
+				$tags = array( '{site_name}', '{user_name}', '{code}', '{ip_address}', '{login_time}', '{expiry_minutes}' );
+				foreach ( $tags as $t ) {
+					echo '<li><code>' . esc_html( $t ) . '</code></li>';
+				}
+				echo '</ul>';
+				echo '<p class="description">' . esc_html__( '{expiry_minutes} is the code lifetime in whole minutes. Leave the HTML body empty to use the plugin’s built-in styled layout for the code.', 'wp-dual-check' ) . '</p>';
+			},
+			$p
+		);
+		add_settings_field( 'email_subject_template', __( 'Subject line', 'wp-dual-check' ), array( self::class, 'field_email_subject_template' ), $p, 'wdc_email_subject' );
+		add_settings_field( 'email_format', __( 'Email format', 'wp-dual-check' ), array( self::class, 'field_email_format' ), $p, 'wdc_email_subject' );
+
+		add_settings_section(
+			'wdc_email_look',
+			__( 'HTML layout', 'wp-dual-check' ),
+			static function (): void {
+				echo '<p>' . esc_html__( 'Colours and images wrap the HTML template. Widths are in pixels (200–920).', 'wp-dual-check' ) . '</p>';
+			},
+			$p
+		);
+		add_settings_field( 'email_accent_color', __( 'Accent colour', 'wp-dual-check' ), array( self::class, 'field_email_accent_color' ), $p, 'wdc_email_look' );
+		add_settings_field( 'email_background_color', __( 'Outer background colour', 'wp-dual-check' ), array( self::class, 'field_email_background_color' ), $p, 'wdc_email_look' );
+		add_settings_field( 'email_container_max_width_px', __( 'Email content max width', 'wp-dual-check' ), array( self::class, 'field_email_container_max_width_px' ), $p, 'wdc_email_look' );
+		add_settings_field( 'email_header_text', __( 'Header bar (HTML)', 'wp-dual-check' ), array( self::class, 'field_email_header_text' ), $p, 'wdc_email_look' );
+		add_settings_field( 'email_header_image_url', __( 'Header image URL', 'wp-dual-check' ), array( self::class, 'field_email_header_image_url' ), $p, 'wdc_email_look' );
+		add_settings_field( 'email_header_width_px', __( 'Header image width', 'wp-dual-check' ), array( self::class, 'field_email_header_width_px' ), $p, 'wdc_email_look' );
+		add_settings_field( 'email_footer_image_url', __( 'Footer image URL', 'wp-dual-check' ), array( self::class, 'field_email_footer_image_url' ), $p, 'wdc_email_look' );
+		add_settings_field( 'email_footer_width_px', __( 'Footer image width', 'wp-dual-check' ), array( self::class, 'field_email_footer_width_px' ), $p, 'wdc_email_look' );
+		add_settings_field( 'email_footer_text', __( 'Footer (HTML)', 'wp-dual-check' ), array( self::class, 'field_email_footer_text' ), $p, 'wdc_email_look' );
+
+		add_settings_section(
+			'wdc_email_bodies',
+			__( 'Message templates', 'wp-dual-check' ),
+			static function (): void {
+				echo '<p>' . esc_html__( 'Plain text is always used for the plain-text part (and required for multipart). HTML is placed inside the layout above when using HTML or multipart.', 'wp-dual-check' ) . '</p>';
+			},
+			$p
+		);
+		add_settings_field( 'email_body_html', __( 'HTML body', 'wp-dual-check' ), array( self::class, 'field_email_body_html' ), $p, 'wdc_email_bodies' );
+		add_settings_field( 'email_body_text', __( 'Plain-text body', 'wp-dual-check' ), array( self::class, 'field_email_body_text' ), $p, 'wdc_email_bodies' );
+	}
+
 	/**
 	 * @param array<string, mixed> $input
 	 * @return array<string, mixed>
@@ -236,12 +349,26 @@ final class Admin_Settings {
 		return array(
 			'require_all_logins'         => array_key_exists( 'require_all_logins', $input ) ? ( '1' === (string) $input['require_all_logins'] ) : (bool) $prev['require_all_logins'],
 			'code_ttl'                   => isset( $input['code_ttl'] ) ? max( 60, min( 86400, (int) $input['code_ttl'] ) ) : (int) $prev['code_ttl'],
+			'code_length'                => isset( $input['code_length'] ) ? max( 4, min( 12, (int) $input['code_length'] ) ) : (int) ( $prev['code_length'] ?? 6 ),
 			'max_attempts'               => isset( $input['max_attempts'] ) ? max( 1, min( 50, (int) $input['max_attempts'] ) ) : (int) $prev['max_attempts'],
 			'resend_cooldown'            => isset( $input['resend_cooldown'] ) ? max( 15, min( 600, (int) $input['resend_cooldown'] ) ) : (int) $prev['resend_cooldown'],
 			'from_email'                 => isset( $input['from_email'] ) ? sanitize_email( (string) $input['from_email'] ) : (string) $prev['from_email'],
 			'from_name'                  => isset( $input['from_name'] ) ? sanitize_text_field( (string) $input['from_name'] ) : (string) $prev['from_name'],
 			'default_mailer_transport'   => Mailer::sanitize_transport_id( $transport, Mailer::TRANSPORT_DSN ),
 			'debug_logging'              => array_key_exists( 'debug_logging', $input ) ? ( '1' === (string) $input['debug_logging'] ) : (bool) $prev['debug_logging'],
+			'email_subject_template'     => isset( $input['email_subject_template'] ) ? sanitize_text_field( (string) $input['email_subject_template'] ) : (string) $prev['email_subject_template'],
+			'email_format'               => isset( $input['email_format'] ) ? self::sanitize_email_format( (string) $input['email_format'] ) : (string) $prev['email_format'],
+			'email_accent_color'         => isset( $input['email_accent_color'] ) ? self::sanitize_hex_color_field( (string) $input['email_accent_color'], (string) $prev['email_accent_color'] ) : (string) $prev['email_accent_color'],
+			'email_background_color'     => isset( $input['email_background_color'] ) ? self::sanitize_hex_color_field( (string) $input['email_background_color'], (string) $prev['email_background_color'] ) : (string) $prev['email_background_color'],
+			'email_header_text'          => isset( $input['email_header_text'] ) ? wp_kses_post( (string) $input['email_header_text'] ) : (string) $prev['email_header_text'],
+			'email_header_image_url'     => isset( $input['email_header_image_url'] ) ? esc_url_raw( (string) $input['email_header_image_url'] ) : (string) $prev['email_header_image_url'],
+			'email_header_width_px'      => isset( $input['email_header_width_px'] ) ? max( 200, min( 920, (int) $input['email_header_width_px'] ) ) : (int) $prev['email_header_width_px'],
+			'email_footer_image_url'     => isset( $input['email_footer_image_url'] ) ? esc_url_raw( (string) $input['email_footer_image_url'] ) : (string) $prev['email_footer_image_url'],
+			'email_footer_width_px'      => isset( $input['email_footer_width_px'] ) ? max( 200, min( 920, (int) $input['email_footer_width_px'] ) ) : (int) $prev['email_footer_width_px'],
+			'email_container_max_width_px' => isset( $input['email_container_max_width_px'] ) ? max( 200, min( 920, (int) $input['email_container_max_width_px'] ) ) : (int) $prev['email_container_max_width_px'],
+			'email_footer_text'          => isset( $input['email_footer_text'] ) ? wp_kses_post( (string) $input['email_footer_text'] ) : (string) $prev['email_footer_text'],
+			'email_body_html'            => isset( $input['email_body_html'] ) ? wp_kses_post( (string) $input['email_body_html'] ) : (string) $prev['email_body_html'],
+			'email_body_text'            => isset( $input['email_body_text'] ) ? sanitize_textarea_field( (string) $input['email_body_text'] ) : (string) $prev['email_body_text'],
 			'api_sendgrid_key'           => self::sanitize_secret_field( $input, 'api_sendgrid_key', $prev ),
 			'api_mailgun_key'            => self::sanitize_secret_field( $input, 'api_mailgun_key', $prev ),
 			'api_mailgun_domain'         => isset( $input['api_mailgun_domain'] ) ? sanitize_text_field( (string) $input['api_mailgun_domain'] ) : (string) $prev['api_mailgun_domain'],
@@ -278,6 +405,41 @@ final class Admin_Settings {
 		}
 
 		return $v;
+	}
+
+	private static function sanitize_email_format( string $value ): string {
+		$value = sanitize_key( $value );
+		$ok    = array( Email_Template::FORMAT_TEXT, Email_Template::FORMAT_HTML, Email_Template::FORMAT_MULTIPART );
+
+		return in_array( $value, $ok, true ) ? $value : Email_Template::FORMAT_MULTIPART;
+	}
+
+	private static function sanitize_hex_color_field( string $value, string $fallback ): string {
+		$c = sanitize_hex_color( trim( $value ) );
+		if ( '' !== $c ) {
+			return $c;
+		}
+		$f = sanitize_hex_color( trim( $fallback ) );
+
+		return '' !== $f ? $f : '#2271b1';
+	}
+
+	/**
+	 * Normalize stored hex for HTML5 color input (#rrggbb only).
+	 */
+	private static function hex_for_color_input( string $hex, string $fallback ): string {
+		$c = sanitize_hex_color( trim( $hex ) );
+		if ( '' === $c ) {
+			$c = sanitize_hex_color( trim( $fallback ) );
+		}
+		if ( '' === $c ) {
+			$c = '#2271b1';
+		}
+		if ( 4 === strlen( $c ) && '#' === $c[0] ) {
+			$c = '#' . $c[1] . $c[1] . $c[2] . $c[2] . $c[3] . $c[3];
+		}
+
+		return $c;
 	}
 
 	/**
@@ -353,6 +515,26 @@ final class Admin_Settings {
 				?>
 			</form>
 			<p class="description"><?php esc_html_e( 'Uses your user profile delivery email if set; otherwise your account email. Login code email filters are not applied.', 'wp-dual-check' ); ?></p>
+		</div>
+		<?php
+	}
+
+	public static function render_page_email_template(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		?>
+		<div class="wrap">
+			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+			<?php self::print_settings_saved_notice(); ?>
+			<form action="options.php" method="post">
+				<?php
+				settings_fields( self::OPTION_GROUP );
+				do_settings_sections( self::PAGE_EMAIL_TEMPLATE );
+				submit_button();
+				?>
+			</form>
+			<p class="description"><?php esc_html_e( 'Code length is configured on the General screen. Filters wp_dual_check_email_subject and wp_dual_check_email_body still run after templates are built.', 'wp-dual-check' ); ?></p>
 		</div>
 		<?php
 	}
@@ -450,6 +632,12 @@ final class Admin_Settings {
 		echo '<p class="description">' . esc_html__( 'How long the pending login and code remain valid.', 'wp-dual-check' ) . '</p>';
 	}
 
+	public static function field_code_length(): void {
+		$v = (int) self::merged()['code_length'];
+		echo '<input type="number" min="4" max="12" class="small-text" name="' . esc_attr( self::OPTION_KEY ) . '[code_length]" value="' . esc_attr( (string) $v ) . '" />';
+		echo '<p class="description">' . esc_html__( 'Number of digits in the login code (e.g. 6).', 'wp-dual-check' ) . '</p>';
+	}
+
 	public static function field_max_attempts(): void {
 		$v = (int) self::merged()['max_attempts'];
 		echo '<input type="number" min="1" max="50" class="small-text" name="' . esc_attr( self::OPTION_KEY ) . '[max_attempts]" value="' . esc_attr( (string) $v ) . '" />';
@@ -545,6 +733,125 @@ final class Admin_Settings {
 		echo '<p><label for="wdc_gm_p">' . esc_html__( 'App password', 'wp-dual-check' ) . '</label><br />';
 		echo '<input type="password" class="regular-text" name="' . esc_attr( self::OPTION_KEY ) . '[api_gmail_app_password]" id="wdc_gm_p" value="" autocomplete="new-password" placeholder="' . esc_attr( $ph ) . '" /></p>';
 		echo '<p class="description">' . esc_html__( 'Env: WP_DUAL_CHECK_GMAIL_ADDRESS, GMAIL_APP_PASSWORD', 'wp-dual-check' ) . '</p>';
+	}
+
+	public static function field_email_subject_template(): void {
+		$v = (string) self::merged()['email_subject_template'];
+		echo '<input type="text" class="large-text wdc-wide-field" name="' . esc_attr( self::OPTION_KEY ) . '[email_subject_template]" value="' . esc_attr( $v ) . '" autocomplete="off" />';
+	}
+
+	public static function field_email_format(): void {
+		$m = self::merged();
+		$c = isset( $m['email_format'] ) ? (string) $m['email_format'] : Email_Template::FORMAT_MULTIPART;
+		$name = self::OPTION_KEY . '[email_format]';
+		echo '<select id="wdc_email_format" name="' . esc_attr( $name ) . '">';
+		echo '<option value="' . esc_attr( Email_Template::FORMAT_MULTIPART ) . '" ' . selected( $c, Email_Template::FORMAT_MULTIPART, false ) . '>' . esc_html__( 'HTML + plain text (multipart)', 'wp-dual-check' ) . '</option>';
+		echo '<option value="' . esc_attr( Email_Template::FORMAT_HTML ) . '" ' . selected( $c, Email_Template::FORMAT_HTML, false ) . '>' . esc_html__( 'HTML only', 'wp-dual-check' ) . '</option>';
+		echo '<option value="' . esc_attr( Email_Template::FORMAT_TEXT ) . '" ' . selected( $c, Email_Template::FORMAT_TEXT, false ) . '>' . esc_html__( 'Plain text only', 'wp-dual-check' ) . '</option>';
+		echo '</select>';
+	}
+
+	public static function field_email_accent_color(): void {
+		$v       = (string) self::merged()['email_accent_color'];
+		$picker  = self::hex_for_color_input( $v, '#2271b1' );
+		$id_pick = 'wdc_email_accent_color_pick';
+		$id_text = 'wdc_email_accent_color_text';
+		echo '<span class="wdc-color-sync" data-wdc-color-sync>';
+		echo '<input type="color" id="' . esc_attr( $id_pick ) . '" class="wdc-color-field" value="' . esc_attr( $picker ) . '" title="' . esc_attr__( 'Choose accent colour', 'wp-dual-check' ) . '" /> ';
+		echo '<input type="text" id="' . esc_attr( $id_text ) . '" class="wdc-color-hex-input" name="' . esc_attr( self::OPTION_KEY ) . '[email_accent_color]" value="' . esc_attr( $v ) . '" pattern="^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$" maxlength="7" spellcheck="false" />';
+		echo '</span>';
+		echo '<p class="description">' . esc_html__( 'Used for the optional header bar behind “Header bar (HTML)”. Adjust with the picker or type a hex value.', 'wp-dual-check' ) . '</p>';
+	}
+
+	public static function field_email_background_color(): void {
+		$v       = (string) self::merged()['email_background_color'];
+		$picker  = self::hex_for_color_input( $v, '#f0f0f1' );
+		$id_pick = 'wdc_email_background_color_pick';
+		$id_text = 'wdc_email_background_color_text';
+		echo '<span class="wdc-color-sync" data-wdc-color-sync>';
+		echo '<input type="color" id="' . esc_attr( $id_pick ) . '" class="wdc-color-field" value="' . esc_attr( $picker ) . '" title="' . esc_attr__( 'Choose outer background colour', 'wp-dual-check' ) . '" /> ';
+		echo '<input type="text" id="' . esc_attr( $id_text ) . '" class="wdc-color-hex-input" name="' . esc_attr( self::OPTION_KEY ) . '[email_background_color]" value="' . esc_attr( $v ) . '" pattern="^#([A-Fa-f0-9]{6}|[A-Fa-f0-9]{3})$" maxlength="7" spellcheck="false" />';
+		echo '</span>';
+	}
+
+	public static function field_email_container_max_width_px(): void {
+		$v = (int) self::merged()['email_container_max_width_px'];
+		echo '<input type="number" min="200" max="920" class="small-text" name="' . esc_attr( self::OPTION_KEY ) . '[email_container_max_width_px]" value="' . esc_attr( (string) $v ) . '" /> px';
+	}
+
+	public static function field_email_header_text(): void {
+		$v = (string) self::merged()['email_header_text'];
+		echo '<textarea class="large-text wdc-wide-field" rows="4" name="' . esc_attr( self::OPTION_KEY ) . '[email_header_text]">' . esc_textarea( $v ) . '</textarea>';
+		echo '<p class="description">' . esc_html__( 'Shown on a bar using the accent colour (above the main content).', 'wp-dual-check' ) . '</p>';
+	}
+
+	public static function field_email_header_image_url(): void {
+		self::render_email_image_url_field(
+			'email_header_image_url',
+			'wdc_email_header_image',
+			__( 'Paste an image URL or open the Media Library. Use a publicly reachable address (HTTPS recommended).', 'wp-dual-check' )
+		);
+	}
+
+	public static function field_email_header_width_px(): void {
+		$v = (int) self::merged()['email_header_width_px'];
+		echo '<input type="number" min="200" max="920" class="small-text" name="' . esc_attr( self::OPTION_KEY ) . '[email_header_width_px]" value="' . esc_attr( (string) $v ) . '" /> px';
+	}
+
+	public static function field_email_footer_image_url(): void {
+		self::render_email_image_url_field(
+			'email_footer_image_url',
+			'wdc_email_footer_image',
+			__( 'Paste an image URL or open the Media Library. Use a publicly reachable address (HTTPS recommended).', 'wp-dual-check' )
+		);
+	}
+
+	/**
+	 * URL field + Media Library picker + preview (login email template).
+	 */
+	private static function render_email_image_url_field( string $settings_key, string $id_prefix, string $description ): void {
+		$v         = (string) self::merged()[ $settings_key ];
+		$input_id  = $id_prefix . '_url';
+		$name      = self::OPTION_KEY . '[' . $settings_key . ']';
+		$has_image = '' !== $v;
+		echo '<div class="wdc-media-url-field" data-wdc-media-url>';
+		echo '<div class="wdc-media-url-row">';
+		echo '<input type="url" id="' . esc_attr( $input_id ) . '" class="large-text wdc-wide-field wdc-media-url-input" name="' . esc_attr( $name ) . '" value="' . esc_attr( $v ) . '" placeholder="https://..." autocomplete="off" />';
+		echo '<p class="wdc-media-url-actions">';
+		echo '<button type="button" class="button wdc-media-select">' . esc_html__( 'Media Library…', 'wp-dual-check' ) . '</button> ';
+		echo '<button type="button" class="button-link wdc-media-clear">' . esc_html__( 'Clear', 'wp-dual-check' ) . '</button>';
+		echo '</p>';
+		echo '</div>';
+		echo '<div class="wdc-media-preview-wrap"' . ( $has_image ? '' : ' style="display:none;"' ) . '>';
+		if ( $has_image ) {
+			echo '<img src="' . esc_url( $v ) . '" alt="" class="wdc-media-preview-img" />';
+		} else {
+			echo '<img src="" alt="" class="wdc-media-preview-img" />';
+		}
+		echo '</div>';
+		echo '</div>';
+		echo '<p class="description">' . esc_html( $description ) . '</p>';
+	}
+
+	public static function field_email_footer_width_px(): void {
+		$v = (int) self::merged()['email_footer_width_px'];
+		echo '<input type="number" min="200" max="920" class="small-text" name="' . esc_attr( self::OPTION_KEY ) . '[email_footer_width_px]" value="' . esc_attr( (string) $v ) . '" /> px';
+	}
+
+	public static function field_email_footer_text(): void {
+		$v = (string) self::merged()['email_footer_text'];
+		echo '<textarea class="large-text wdc-wide-field" rows="5" name="' . esc_attr( self::OPTION_KEY ) . '[email_footer_text]">' . esc_textarea( $v ) . '</textarea>';
+	}
+
+	public static function field_email_body_html(): void {
+		$v = (string) self::merged()['email_body_html'];
+		echo '<textarea class="large-text code wdc-wide-field wdc-tall-html" rows="22" name="' . esc_attr( self::OPTION_KEY ) . '[email_body_html]">' . esc_textarea( $v ) . '</textarea>';
+		echo '<p class="description">' . esc_html__( 'Leave empty for the default styled code block. Allowed HTML is filtered for safety.', 'wp-dual-check' ) . '</p>';
+	}
+
+	public static function field_email_body_text(): void {
+		$v = (string) self::merged()['email_body_text'];
+		echo '<textarea class="large-text wdc-wide-field wdc-tall-plain" rows="14" name="' . esc_attr( self::OPTION_KEY ) . '[email_body_text]">' . esc_textarea( $v ) . '</textarea>';
 	}
 
 	public static function field_debug_logging(): void {

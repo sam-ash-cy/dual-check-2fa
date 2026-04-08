@@ -72,6 +72,11 @@ final class Config {
 		return max( 60, $v );
 	}
 
+	public static function code_length_digits(): int {
+		$v = (int) ( Admin_Settings::merged()['code_length'] ?? 6 );
+		return max( 4, min( 12, $v ) );
+	}
+
 	public static function max_attempts(): int {
 		$v = (int) Admin_Settings::merged()['max_attempts'];
 		return max( 1, $v );

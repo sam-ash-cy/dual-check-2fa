@@ -8,6 +8,8 @@
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
+
+$wdc_code_len = \WPDualCheck\Config::code_length_digits();
 ?>
 <div id="wdc-challenge" class="wdc-challenge">
 	<form name="wdcverify" id="wdcverify" action="<?php echo esc_url( site_url( 'wp-login.php', 'login_post' ) ); ?>" method="post">
@@ -17,7 +19,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 		<?php wp_nonce_field( 'wdc_verify', 'wdc_nonce' ); ?>
 		<p>
 			<label for="wdc_code"><?php esc_html_e( 'Email login code', 'wp-dual-check' ); ?></label>
-			<input type="text" name="wdc_code" id="wdc_code" class="input" value="" size="10" autocomplete="one-time-code" inputmode="numeric" />
+			<input type="text" name="wdc_code" id="wdc_code" class="input" value="" size="<?php echo esc_attr( (string) max( 8, $wdc_code_len + 2 ) ); ?>" maxlength="<?php echo esc_attr( (string) $wdc_code_len ); ?>" autocomplete="one-time-code" inputmode="numeric" />
 		</p>
 		<p class="submit">
 			<input type="submit" name="wp-submit" id="wp-submit" class="button button-primary button-large" value="<?php esc_attr_e( 'Verify', 'wp-dual-check' ); ?>" />

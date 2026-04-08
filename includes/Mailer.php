@@ -125,7 +125,7 @@ final class Mailer {
 
 		$t = self::resolve_transport_for_user( $user );
 
-		return self::dispatch( $t, $user, $to, $subject, $body, 'test' );
+		return self::dispatch( $t, $user, $to, $subject, $body, null, false, 'test' );
 	}
 
 	public static function send_code_email( \WP_User $user, string $plain_code ): \WP_Error|true {
@@ -137,36 +137,24 @@ final class Mailer {
 			);
 		}
 
-		$subject = (string) apply_filters(
-			'wp_dual_check_email_subject',
-			sprintf(
-				/* translators: %s: site name */
-				__( 'Your login code for %s', 'wp-dual-check' ),
-				wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES )
-			),
-			$user
-		);
+		$parts = Email_Template::build_login_code_email( $user, $plain_code );
+		$t     = self::resolve_transport_for_user( $user );
 
-		$body = (string) apply_filters(
-			'wp_dual_check_email_body',
-			sprintf(
-				/* translators: 1: numeric code, 2: expiry minutes */
-				__( "Your login code is: %1\$s\n\nIt expires in about %2\$d minutes.", 'wp-dual-check' ),
-				$plain_code,
-				(int) ceil( Config::code_ttl_seconds() / 60 )
-			),
+		return self::dispatch(
+			$t,
 			$user,
-			$plain_code
+			$to,
+			$parts['subject'],
+			$parts['text'],
+			$parts['html'],
+			$parts['multipart'],
+			'login_code'
 		);
-
-		$t = self::resolve_transport_for_user( $user );
-
-		return self::dispatch( $t, $user, $to, $subject, $body, 'login_code' );
 	}
 
-	private static function dispatch( string $transport, \WP_User $user, string $to, string $subject, string $body, string $kind ): \WP_Error|true {
+	private static function dispatch( string $transport, \WP_User $user, string $to, string $subject, string $body_text, ?string $body_html, bool $multipart, string $kind ): \WP_Error|true {
 		if ( self::TRANSPORT_WP_MAIL === $transport ) {
-			return self::send_via_wp_mail( $user, $to, $subject, $body, $kind );
+			return self::send_via_wp_mail( $user, $to, $subject, $body_text, $body_html, $multipart, $kind );
 		}
 
 		$dsn = self::dsn_for_symfony_transport( $transport );
@@ -194,8 +182,21 @@ final class Mailer {
 			$email = ( new Email() )
 				->from( new Address( Config::from_email(), Config::from_name() ) )
 				->to( new Address( $to ) )
-				->subject( $subject )
-				->text( $body );
+				->subject( $subject );
+
+			if ( null !== $body_html && '' !== $body_html ) {
+				if ( $multipart && '' !== $body_text ) {
+					$email->text( $body_text );
+					$email->html( $body_html );
+				} else {
+					$email->html( $body_html );
+					if ( '' !== $body_text ) {
+						$email->text( $body_text );
+					}
+				}
+			} else {
+				$email->text( $body_text );
+			}
 
 			$mailer->send( $email );
 		} catch ( \Throwable $e ) {
@@ -219,7 +220,7 @@ final class Mailer {
 			case self::TRANSPORT_DSN:
 				return __( 'Set WP_DUAL_CHECK_MAILER_DSN (or choose another transport and fill API settings below).', 'wp-dual-check' );
 			case self::TRANSPORT_SENDGRID_API:
-				return __( 'SendGrid: add an API key under WP Dual Check → API providers, or set WP_DUAL_CHECK_SENDGRID_API_KEY.', 'wp-dual-check' );
+				return __( 'SendGrid: add an API key under WP Dual Check → Mail Transport Providers, or set WP_DUAL_CHECK_SENDGRID_API_KEY.', 'wp-dual-check' );
 			case self::TRANSPORT_MAILGUN_API:
 				return __( 'Mailgun: add API key, sending domain, and region, or use the WP_DUAL_CHECK_MAILGUN_* environment variables.', 'wp-dual-check' );
 			case self::TRANSPORT_SES_API:
@@ -342,15 +343,33 @@ final class Mailer {
 		);
 	}
 
-	private static function send_via_wp_mail( \WP_User $user, string $to, string $subject, string $body, string $kind ): \WP_Error|true {
+	/** @var ?string */
+	private static $wp_mail_alt_body = null;
+
+	private static function send_via_wp_mail( \WP_User $user, string $to, string $subject, string $body_text, ?string $body_html, bool $multipart, string $kind ): \WP_Error|true {
 		$from_email = Config::from_email();
 		$from_name  = Config::from_name();
-		$headers    = array( 'Content-Type: text/plain; charset=UTF-8' );
+		$headers    = array();
 		if ( is_email( $from_email ) ) {
 			$headers[] = 'From: ' . self::format_rfc_from( $from_name, $from_email );
 		}
 
+		$body = $body_text;
+		if ( null !== $body_html && '' !== $body_html ) {
+			$headers[] = 'Content-Type: text/html; charset=UTF-8';
+			$body      = $body_html;
+			if ( $multipart && '' !== $body_text ) {
+				self::$wp_mail_alt_body = $body_text;
+				add_action( 'phpmailer_init', array( self::class, 'phpmailer_set_alt_body' ), 10, 1 );
+			}
+		} else {
+			$headers[] = 'Content-Type: text/plain; charset=UTF-8';
+		}
+
 		$sent = wp_mail( $to, $subject, $body, $headers );
+
+		remove_action( 'phpmailer_init', array( self::class, 'phpmailer_set_alt_body' ), 10 );
+		self::$wp_mail_alt_body = null;
 		if ( ! $sent ) {
 			Logger::log(
 				'test' === $kind ? 'test_mail_failed' : 'login_code_mail_failed',
@@ -369,6 +388,15 @@ final class Mailer {
 		);
 
 		return true;
+	}
+
+	/**
+	 * @param \PHPMailer\PHPMailer\PHPMailer|\PHPMailer $phpmailer WordPress core PHPMailer instance.
+	 */
+	public static function phpmailer_set_alt_body( object $phpmailer ): void {
+		if ( null !== self::$wp_mail_alt_body && '' !== self::$wp_mail_alt_body ) {
+			$phpmailer->AltBody = self::$wp_mail_alt_body;
+		}
 	}
 
 	private static function format_rfc_from( string $name, string $email ): string {

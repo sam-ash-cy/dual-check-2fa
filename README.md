@@ -53,7 +53,8 @@ Open **WP Dual Check** in the admin sidebar:
 1. Turn on **Require email verification code for every user after a correct password (all logins)** so **every** WordPress login (including `wp-admin`) must complete the email code step.
 2. Choose **Default mail transport** — includes **SendGrid**, **Mailgun**, **Amazon SES**, **Postmark** (HTTP APIs), **Gmail (SMTP + app password)**, generic **DSN**, **wp_mail**, **PHP mail**, and **sendmail**.
 3. Open **Mail Transport Providers** and pick the tab for your service (**SendGrid**, **Mailgun**, **Amazon SES**, **Postmark**, or **Gmail (SMTP)**), or use environment variables. Secret fields left blank keep the previous saved value.
-4. Adjust expiry, attempts, resend cooldown, and from name/email as needed on **General**.
+4. On **General**, set **Code length (digits)** (e.g. 6), plus expiry, attempts, resend cooldown, and from name/email.
+5. Under **Email template**, customize the login-code subject, plain/HTML bodies, colours, header/footer images and widths. Placeholders: `{site_name}`, `{user_name}`, `{code}`, `{ip_address}`, `{login_time}`, `{expiry_minutes}`.
 
 ### Optional: different inbox or transport per user
 
@@ -61,8 +62,11 @@ Under **Users → Profile**, administrators (or anyone who can edit other users)
 
 ## Filters
 
+Templates from **Email template** are applied first; then:
+
 - `wp_dual_check_email_subject` — `( $subject, $user )`
-- `wp_dual_check_email_body` — `( $body, $user, $plain_code )`
+- `wp_dual_check_email_body` — `( $body, $user, $plain_code )` (plain-text part only)
+- `wp_dual_check_client_ip` — `( $ip )` string shown in `{ip_address}` (default: `REMOTE_ADDR`)
 - `wp_dual_check_mail_transport_choices` — `( $choices )` associative array of transport id => label
 - `wp_dual_check_symfony_dsn` — `( $dsn, $transport, $user )` return a DSN string to override or replace built-in API DSNs (e.g. custom OAuth bridge)
 
