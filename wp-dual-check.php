@@ -27,7 +27,7 @@ if ( ! is_readable( $wdc_autoload ) ) {
 		'admin_notices',
 		static function () {
 			echo '<div class="notice notice-error"><p>';
-			echo esc_html__( 'WP Dual Check: run composer install in the wp-dual-check plugin directory.', 'wp-dual-check' );
+			echo esc_html__( 'WP Dual Check: install dependencies first (run composer install in the plugin directory, or use a release package that includes the vendor folder).', 'wp-dual-check' );
 			echo '</p></div>';
 		}
 	);

@@ -5,6 +5,7 @@
 	"license": "GPL-2.0-or-later",
 	"require": {
 		"php": ">=8.2",
+		"symfony/event-dispatcher": "^7.0",
 		"symfony/amazon-mailer": "^7.2",
 		"symfony/google-mailer": "^7.2",
 		"symfony/http-client": "^7.2",

@@ -27,6 +27,25 @@ final class Mailer {
 	public const USER_TRANSPORT_INHERIT = 'inherit';
 
 	/**
+	 * Transports that use the “API email providers” settings (or matching env vars).
+	 *
+	 * @return list<string>
+	 */
+	public static function api_transport_ids(): array {
+		return array(
+			self::TRANSPORT_SENDGRID_API,
+			self::TRANSPORT_MAILGUN_API,
+			self::TRANSPORT_SES_API,
+			self::TRANSPORT_POSTMARK_API,
+			self::TRANSPORT_GMAIL_SMTP,
+		);
+	}
+
+	public static function is_api_transport( string $transport ): bool {
+		return in_array( $transport, self::api_transport_ids(), true );
+	}
+
+	/**
 	 * Built-in Symfony DSNs (no env DSN required).
 	 */
 	private const EMBEDDED_DSN = array(

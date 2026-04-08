@@ -1,6 +1,6 @@
 <?php
 /**
- * Top-level admin menu: TTL, attempts, mail identity, transport, resend cooldown (secrets stay in ENV).
+ * Admin: General on the main item; HTTP API / Gmail credentials live under Mail Transport Providers (tabbed).
  *
  * @package WPDualCheck
  */
@@ -11,7 +11,21 @@ final class Admin_Settings {
 
 	public const OPTION_KEY   = 'wp_dual_check_settings';
 	public const PAGE_SLUG    = 'wp-dual-check';
+	public const PAGE_MAIL_PROVIDERS = 'wp-dual-check-mail-providers';
 	public const OPTION_GROUP = 'wp_dual_check_settings_group';
+
+	/**
+	 * Tab slug => settings section id (wdc_*).
+	 *
+	 * @var array<string, string>
+	 */
+	private const MAIL_PROVIDER_TABS = array(
+		'sendgrid' => 'wdc_sendgrid',
+		'mailgun'  => 'wdc_mailgun',
+		'ses'      => 'wdc_ses',
+		'postmark' => 'wdc_postmark',
+		'gmail'    => 'wdc_gmail',
+	);
 
 	public const DEFAULTS = array(
 		'require_all_logins'       => false,
@@ -32,7 +46,6 @@ final class Admin_Settings {
 		'api_postmark_token'       => '',
 		'api_gmail_user'           => '',
 		'api_gmail_app_password'   => '',
-		'api_ops_notes'            => '',
 	);
 
 	public static function register(): void {
@@ -50,6 +63,23 @@ final class Admin_Settings {
 			array( self::class, 'render_page' ),
 			'dashicons-shield',
 			80
+		);
+		// Replace the auto “WP Dual Check” duplicate with a clear General entry.
+		add_submenu_page(
+			self::PAGE_SLUG,
+			__( 'General', 'wp-dual-check' ),
+			__( 'General', 'wp-dual-check' ),
+			'manage_options',
+			self::PAGE_SLUG,
+			array( self::class, 'render_page' )
+		);
+		add_submenu_page(
+			self::PAGE_SLUG,
+			__( 'Mail Transport Providers', 'wp-dual-check' ),
+			__( 'Mail Transport Providers', 'wp-dual-check' ),
+			'manage_options',
+			self::PAGE_MAIL_PROVIDERS,
+			array( self::class, 'render_page_mail_providers' )
 		);
 	}
 
@@ -69,7 +99,7 @@ final class Admin_Settings {
 			__( 'Email challenge', 'wp-dual-check' ),
 			static function () {
 				echo '<p>' . esc_html__( 'When enabled below, every successful password login goes to the email code step before access is granted (wp-login.php, wp-admin, and any flow using WordPress authentication).', 'wp-dual-check' ) . '</p>';
-				echo '<p>' . esc_html__( 'SMTP credentials stay in environment variables or wp-config.php, not here.', 'wp-dual-check' ) . '</p>';
+				echo '<p>' . esc_html__( 'Secrets for mail (DSN, API keys) belong in environment variables or wp-config.php when possible—not in these form fields.', 'wp-dual-check' ) . '</p>';
 			},
 			self::PAGE_SLUG
 		);
@@ -125,58 +155,7 @@ final class Admin_Settings {
 			'wdc_main'
 		);
 
-		add_settings_section(
-			'wdc_api',
-			__( 'API email providers', 'wp-dual-check' ),
-			static function () {
-				echo '<p>' . esc_html__( 'Used when the default (or per-user) transport is SendGrid, Mailgun, SES, Postmark, or Gmail SMTP. Prefer wp-config.php or environment variables on production; fields here are stored in the database.', 'wp-dual-check' ) . '</p>';
-				echo '<p>' . esc_html__( 'Leave a secret field blank when saving to keep the previous value.', 'wp-dual-check' ) . '</p>';
-			},
-			self::PAGE_SLUG
-		);
-
-		add_settings_field(
-			'wdc_api_sendgrid',
-			'SendGrid',
-			array( self::class, 'field_api_sendgrid' ),
-			self::PAGE_SLUG,
-			'wdc_api'
-		);
-		add_settings_field(
-			'wdc_api_mailgun',
-			'Mailgun',
-			array( self::class, 'field_api_mailgun' ),
-			self::PAGE_SLUG,
-			'wdc_api'
-		);
-		add_settings_field(
-			'wdc_api_ses',
-			'Amazon SES',
-			array( self::class, 'field_api_ses' ),
-			self::PAGE_SLUG,
-			'wdc_api'
-		);
-		add_settings_field(
-			'wdc_api_postmark',
-			'Postmark',
-			array( self::class, 'field_api_postmark' ),
-			self::PAGE_SLUG,
-			'wdc_api'
-		);
-		add_settings_field(
-			'wdc_api_gmail',
-			'Gmail',
-			array( self::class, 'field_api_gmail' ),
-			self::PAGE_SLUG,
-			'wdc_api'
-		);
-		add_settings_field(
-			'wdc_api_ops_notes',
-			__( 'Operations notes (optional)', 'wp-dual-check' ),
-			array( self::class, 'field_api_ops_notes' ),
-			self::PAGE_SLUG,
-			'wdc_api'
-		);
+		self::register_provider_pages();
 
 		add_settings_section(
 			'wdc_diagnostics',
@@ -209,10 +188,36 @@ final class Admin_Settings {
 				}
 				echo '</p>';
 				echo '<p>' . esc_html__( 'Optional: WP_DUAL_CHECK_SECRET (or legacy WP2FA_SECRET) for a stable HMAC key across multiple servers.', 'wp-dual-check' ) . '</p>';
-				echo '<p>' . esc_html__( 'API provider keys can also be set via constants/environment (see README). Those override the fields above.', 'wp-dual-check' ) . '</p>';
+				echo '<p>' . esc_html__( 'API provider keys can be set via constants/environment (see README); those override the values saved under Mail Transport Providers.', 'wp-dual-check' ) . '</p>';
 			},
 			self::PAGE_SLUG
 		);
+	}
+
+	/**
+	 * Tabbed provider credentials (single admin submenu).
+	 */
+	private static function register_provider_pages(): void {
+		$intro = static function (): void {
+			echo '<p>' . esc_html__( 'Prefer environment variables or wp-config.php on production. Values here are stored in the database. Leave a secret field blank when saving to keep the previous value.', 'wp-dual-check' ) . '</p>';
+		};
+
+		$page = self::PAGE_MAIL_PROVIDERS;
+
+		add_settings_section( 'wdc_sendgrid', '', $intro, $page );
+		add_settings_field( 'wdc_api_sendgrid', __( 'Credentials', 'wp-dual-check' ), array( self::class, 'field_api_sendgrid' ), $page, 'wdc_sendgrid' );
+
+		add_settings_section( 'wdc_mailgun', '', $intro, $page );
+		add_settings_field( 'wdc_api_mailgun', __( 'Credentials', 'wp-dual-check' ), array( self::class, 'field_api_mailgun' ), $page, 'wdc_mailgun' );
+
+		add_settings_section( 'wdc_ses', '', $intro, $page );
+		add_settings_field( 'wdc_api_ses', __( 'Credentials', 'wp-dual-check' ), array( self::class, 'field_api_ses' ), $page, 'wdc_ses' );
+
+		add_settings_section( 'wdc_postmark', '', $intro, $page );
+		add_settings_field( 'wdc_api_postmark', __( 'Credentials', 'wp-dual-check' ), array( self::class, 'field_api_postmark' ), $page, 'wdc_postmark' );
+
+		add_settings_section( 'wdc_gmail', '', $intro, $page );
+		add_settings_field( 'wdc_api_gmail', __( 'Credentials', 'wp-dual-check' ), array( self::class, 'field_api_gmail' ), $page, 'wdc_gmail' );
 	}
 
 	/**
@@ -229,14 +234,14 @@ final class Admin_Settings {
 		$mg_reg = 'eu' === $mg_reg ? 'eu' : 'us';
 
 		return array(
-			'require_all_logins'         => ! empty( $input['require_all_logins'] ),
+			'require_all_logins'         => array_key_exists( 'require_all_logins', $input ) ? ( '1' === (string) $input['require_all_logins'] ) : (bool) $prev['require_all_logins'],
 			'code_ttl'                   => isset( $input['code_ttl'] ) ? max( 60, min( 86400, (int) $input['code_ttl'] ) ) : (int) $prev['code_ttl'],
 			'max_attempts'               => isset( $input['max_attempts'] ) ? max( 1, min( 50, (int) $input['max_attempts'] ) ) : (int) $prev['max_attempts'],
 			'resend_cooldown'            => isset( $input['resend_cooldown'] ) ? max( 15, min( 600, (int) $input['resend_cooldown'] ) ) : (int) $prev['resend_cooldown'],
-			'from_email'                 => isset( $input['from_email'] ) ? sanitize_email( (string) $input['from_email'] ) : '',
-			'from_name'                  => isset( $input['from_name'] ) ? sanitize_text_field( (string) $input['from_name'] ) : '',
+			'from_email'                 => isset( $input['from_email'] ) ? sanitize_email( (string) $input['from_email'] ) : (string) $prev['from_email'],
+			'from_name'                  => isset( $input['from_name'] ) ? sanitize_text_field( (string) $input['from_name'] ) : (string) $prev['from_name'],
 			'default_mailer_transport'   => Mailer::sanitize_transport_id( $transport, Mailer::TRANSPORT_DSN ),
-			'debug_logging'              => ! empty( $input['debug_logging'] ),
+			'debug_logging'              => array_key_exists( 'debug_logging', $input ) ? ( '1' === (string) $input['debug_logging'] ) : (bool) $prev['debug_logging'],
 			'api_sendgrid_key'           => self::sanitize_secret_field( $input, 'api_sendgrid_key', $prev ),
 			'api_mailgun_key'            => self::sanitize_secret_field( $input, 'api_mailgun_key', $prev ),
 			'api_mailgun_domain'         => isset( $input['api_mailgun_domain'] ) ? sanitize_text_field( (string) $input['api_mailgun_domain'] ) : (string) $prev['api_mailgun_domain'],
@@ -247,7 +252,6 @@ final class Admin_Settings {
 			'api_postmark_token'         => self::sanitize_secret_field( $input, 'api_postmark_token', $prev ),
 			'api_gmail_user'             => isset( $input['api_gmail_user'] ) ? sanitize_email( (string) $input['api_gmail_user'] ) : (string) $prev['api_gmail_user'],
 			'api_gmail_app_password'     => self::sanitize_secret_field( $input, 'api_gmail_app_password', $prev ),
-			'api_ops_notes'              => isset( $input['api_ops_notes'] ) ? sanitize_textarea_field( (string) $input['api_ops_notes'] ) : (string) $prev['api_ops_notes'],
 		);
 	}
 
@@ -291,7 +295,7 @@ final class Admin_Settings {
 				$out = array_merge( self::DEFAULTS, is_array( $stored ) ? $stored : array() );
 			}
 		}
-		unset( $out['rest_enabled'] );
+		unset( $out['rest_enabled'], $out['api_ops_notes'] );
 		if ( ! isset( $out['default_mailer_transport'] ) || ! is_string( $out['default_mailer_transport'] ) ) {
 			$out['default_mailer_transport'] = self::DEFAULTS['default_mailer_transport'];
 		} else {
@@ -304,6 +308,12 @@ final class Admin_Settings {
 		}
 
 		return $out;
+	}
+
+	private static function print_settings_saved_notice(): void {
+		if ( isset( $_GET['settings-updated'] ) && 'true' === sanitize_text_field( wp_unslash( (string) $_GET['settings-updated'] ) ) ) {
+			echo '<div id="wdc-settings-saved" class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'wp-dual-check' ) . '</p></div>';
+		}
 	}
 
 	public static function render_page(): void {
@@ -323,11 +333,7 @@ final class Admin_Settings {
 		?>
 		<div class="wrap">
 			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
-			<?php
-			if ( isset( $_GET['settings-updated'] ) && 'true' === sanitize_text_field( wp_unslash( (string) $_GET['settings-updated'] ) ) ) {
-				echo '<div id="wdc-settings-saved" class="notice notice-success is-dismissible"><p>' . esc_html__( 'Settings saved.', 'wp-dual-check' ) . '</p></div>';
-			}
-			?>
+			<?php self::print_settings_saved_notice(); ?>
 			<form action="options.php" method="post">
 				<?php
 				settings_fields( self::OPTION_GROUP );
@@ -351,8 +357,87 @@ final class Admin_Settings {
 		<?php
 	}
 
+	public static function render_page_mail_providers(): void {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+
+		$tab = isset( $_GET['tab'] ) ? sanitize_key( (string) wp_unslash( $_GET['tab'] ) ) : '';
+		if ( '' === $tab || ! isset( self::MAIL_PROVIDER_TABS[ $tab ] ) ) {
+			$tab = 'sendgrid';
+		}
+		$section_id = self::MAIL_PROVIDER_TABS[ $tab ];
+
+		$tab_labels = array(
+			'sendgrid' => __( 'SendGrid', 'wp-dual-check' ),
+			'mailgun'  => __( 'Mailgun', 'wp-dual-check' ),
+			'ses'      => __( 'Amazon SES', 'wp-dual-check' ),
+			'postmark' => __( 'Postmark', 'wp-dual-check' ),
+			'gmail'    => __( 'Gmail (SMTP)', 'wp-dual-check' ),
+		);
+		?>
+		<div class="wrap">
+			<h1><?php echo esc_html( get_admin_page_title() ); ?></h1>
+			<?php self::print_settings_saved_notice(); ?>
+
+			<h2 class="nav-tab-wrapper wp-clearfix">
+				<?php
+				foreach ( $tab_labels as $tab_slug => $label ) {
+					$url   = add_query_arg(
+						array(
+							'page' => self::PAGE_MAIL_PROVIDERS,
+							'tab'  => $tab_slug,
+						),
+						admin_url( 'admin.php' )
+					);
+					$class = 'nav-tab' . ( $tab === $tab_slug ? ' nav-tab-active' : '' );
+					echo '<a href="' . esc_url( $url ) . '" class="' . esc_attr( $class ) . '">' . esc_html( $label ) . '</a>';
+				}
+				?>
+			</h2>
+
+			<form action="options.php" method="post">
+				<?php
+				settings_fields( self::OPTION_GROUP );
+				self::render_single_settings_section( self::PAGE_MAIL_PROVIDERS, $section_id );
+				submit_button();
+				?>
+			</form>
+			<p class="description"><?php esc_html_e( 'The default mail transport is chosen on WP Dual Check → General.', 'wp-dual-check' ); ?></p>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Output one section (callback + form table) for a tabbed options page.
+	 */
+	private static function render_single_settings_section( string $page, string $section_id ): void {
+		global $wp_settings_sections, $wp_settings_fields;
+
+		if ( empty( $wp_settings_sections[ $page ][ $section_id ] ) ) {
+			return;
+		}
+
+		$section = $wp_settings_sections[ $page ][ $section_id ];
+		if ( ! empty( $section['title'] ) ) {
+			echo '<h2>' . esc_html( $section['title'] ) . '</h2>' . "\n";
+		}
+		if ( ! empty( $section['callback'] ) && is_callable( $section['callback'] ) ) {
+			call_user_func( $section['callback'], $section );
+		}
+
+		if ( empty( $wp_settings_fields[ $page ][ $section_id ] ) ) {
+			return;
+		}
+
+		echo '<table class="form-table" role="presentation">';
+		do_settings_fields( $page, $section_id );
+		echo '</table>';
+	}
+
 	public static function field_require_all_logins(): void {
 		$on = ! empty( self::merged()['require_all_logins'] );
+		echo '<input type="hidden" name="' . esc_attr( self::OPTION_KEY ) . '[require_all_logins]" value="0" />';
 		echo '<label><input type="checkbox" name="' . esc_attr( self::OPTION_KEY ) . '[require_all_logins]" value="1" ' . checked( $on, true, false ) . ' /> ';
 		esc_html_e( 'Require email verification code for every user after a correct password (all logins).', 'wp-dual-check' );
 		echo '</label>';
@@ -396,7 +481,7 @@ final class Admin_Settings {
 			echo '<option value="' . esc_attr( $value ) . '" ' . selected( $current, $value, false ) . '>' . esc_html( $label ) . '</option>';
 		}
 		echo '</select>';
-		echo '<p class="description">' . esc_html__( 'Used for all users unless overridden on their profile. API providers use the section below (or env vars). “DSN” uses WP_DUAL_CHECK_MAILER_DSN only.', 'wp-dual-check' ) . '</p>';
+		echo '<p class="description">' . esc_html__( 'Used for all users unless overridden on their profile. Configure API and Gmail SMTP credentials under Mail Transport Providers.', 'wp-dual-check' ) . '</p>';
 	}
 
 	public static function field_api_sendgrid(): void {
@@ -462,14 +547,9 @@ final class Admin_Settings {
 		echo '<p class="description">' . esc_html__( 'Env: WP_DUAL_CHECK_GMAIL_ADDRESS, GMAIL_APP_PASSWORD', 'wp-dual-check' ) . '</p>';
 	}
 
-	public static function field_api_ops_notes(): void {
-		$v = (string) self::merged()['api_ops_notes'];
-		echo '<textarea class="large-text" rows="4" name="' . esc_attr( self::OPTION_KEY ) . '[api_ops_notes]" id="wdc_api_notes">' . esc_textarea( $v ) . '</textarea>';
-		echo '<p class="description">' . esc_html__( 'Optional: SPF/DKIM/domain verification reminders, ticket links, etc. Not used when sending mail.', 'wp-dual-check' ) . '</p>';
-	}
-
 	public static function field_debug_logging(): void {
 		$on = ! empty( self::merged()['debug_logging'] );
+		echo '<input type="hidden" name="' . esc_attr( self::OPTION_KEY ) . '[debug_logging]" value="0" />';
 		echo '<label><input type="checkbox" name="' . esc_attr( self::OPTION_KEY ) . '[debug_logging]" value="1" ' . checked( $on, true, false ) . ' /> ';
 		esc_html_e( 'Write structured debug lines to the PHP error log (also when WP_DEBUG is true). Never logs login codes or tokens.', 'wp-dual-check' );
 		echo '</label>';

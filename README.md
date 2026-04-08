@@ -6,7 +6,9 @@ Email-based second step after WordPress accepts your password. Pending state and
 
 - PHP 8.2+ (see `composer.json`)
 - WordPress 6.0+
-- Run Composer inside this folder:
+- The **`vendor/`** folder must be present (ship it in your distribution zip so end users never run Composer).
+
+Developers: run Composer in this folder:
 
 ```bash
 cd wp-dual-check
@@ -50,9 +52,8 @@ Open **WP Dual Check** in the admin sidebar:
 
 1. Turn on **Require email verification code for every user after a correct password (all logins)** so **every** WordPress login (including `wp-admin`) must complete the email code step.
 2. Choose **Default mail transport** — includes **SendGrid**, **Mailgun**, **Amazon SES**, **Postmark** (HTTP APIs), **Gmail (SMTP + app password)**, generic **DSN**, **wp_mail**, **PHP mail**, and **sendmail**.
-3. Under **API email providers**, enter keys for the provider you use (or rely on environment variables above). Secret fields left blank keep the previous saved value.
-4. Optional **Operations notes** field for your own reminders (SPF/DKIM, domain verification, etc.) — not sent with mail.
-5. Adjust expiry, attempts, resend cooldown, and from name/email as needed.
+3. Open **Mail Transport Providers** and pick the tab for your service (**SendGrid**, **Mailgun**, **Amazon SES**, **Postmark**, or **Gmail (SMTP)**), or use environment variables. Secret fields left blank keep the previous saved value.
+4. Adjust expiry, attempts, resend cooldown, and from name/email as needed on **General**.
 
 ### Optional: different inbox or transport per user
 
