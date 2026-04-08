@@ -24,6 +24,5 @@ final class Plugin {
 		Admin_Settings::register();
 		User_Settings::register();
 		Login_Intercept::register();
-		Rest::register();
 	}
 }

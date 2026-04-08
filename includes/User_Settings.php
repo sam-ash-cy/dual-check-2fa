@@ -1,6 +1,6 @@
 <?php
 /**
- * Optional per-user delivery email (codes go to account email if unset).
+ * Optional per-user delivery email and mail transport override.
  *
  * @package WPDualCheck
  */
@@ -11,11 +11,23 @@ final class User_Settings {
 
 	public const META_DELIVERY_EMAIL = 'wp_dual_check_delivery_email';
 
+	public const META_MAIL_TRANSPORT = 'wp_dual_check_mailer_transport';
+
 	public static function register(): void {
 		add_action( 'show_user_profile', array( self::class, 'render_profile_fields' ) );
 		add_action( 'edit_user_profile', array( self::class, 'render_profile_fields' ) );
 		add_action( 'personal_options_update', array( self::class, 'save_profile_fields' ) );
 		add_action( 'edit_user_profile_update', array( self::class, 'save_profile_fields' ) );
+	}
+
+	public static function can_set_mailer_transport( int $actor_id, \WP_User $target ): bool {
+		if ( user_can( $actor_id, 'manage_options' ) ) {
+			return true;
+		}
+		if ( (int) $target->ID === $actor_id ) {
+			return false;
+		}
+		return user_can( $actor_id, 'edit_users' );
 	}
 
 	public static function render_profile_fields( \WP_User $user ): void {
@@ -27,6 +39,10 @@ final class User_Settings {
 		if ( '' === $email ) {
 			$email = (string) get_user_meta( $user->ID, 'wp2fa_delivery_email', true );
 		}
+
+		$actor_id = get_current_user_id();
+		$show_transport = self::can_set_mailer_transport( $actor_id, $user );
+
 		wp_nonce_field( 'wdc_profile', 'wdc_profile_nonce' );
 		?>
 		<h2><?php esc_html_e( 'WP Dual Check (email)', 'wp-dual-check' ); ?></h2>
@@ -40,6 +56,36 @@ final class User_Settings {
 					</p>
 				</td>
 			</tr>
+			<?php if ( $show_transport ) : ?>
+				<tr>
+					<th scope="row"><label for="wp_dual_check_mailer_transport"><?php esc_html_e( 'Login code mail transport', 'wp-dual-check' ); ?></label></th>
+					<td>
+						<select name="wp_dual_check_mailer_transport" id="wp_dual_check_mailer_transport">
+							<?php
+							$raw = (string) get_user_meta( $user->ID, self::META_MAIL_TRANSPORT, true );
+							if ( '' === $raw ) {
+								$raw = (string) get_user_meta( $user->ID, 'wp2fa_mailer_transport', true );
+							}
+							$raw = sanitize_key( $raw );
+							if ( '' === $raw ) {
+								$raw = Mailer::USER_TRANSPORT_INHERIT;
+							}
+							?>
+							<option value="<?php echo esc_attr( Mailer::USER_TRANSPORT_INHERIT ); ?>" <?php selected( $raw, Mailer::USER_TRANSPORT_INHERIT ); ?>>
+								<?php esc_html_e( 'Site default', 'wp-dual-check' ); ?>
+							</option>
+							<?php foreach ( Mailer::transport_choices() as $value => $label ) : ?>
+								<option value="<?php echo esc_attr( $value ); ?>" <?php selected( $raw, $value ); ?>>
+									<?php echo esc_html( $label ); ?>
+								</option>
+							<?php endforeach; ?>
+						</select>
+						<p class="description">
+							<?php esc_html_e( 'Override how login codes are sent for this user only. Site default is set under WP Dual Check.', 'wp-dual-check' ); ?>
+						</p>
+					</td>
+				</tr>
+			<?php endif; ?>
 		</table>
 		<?php
 	}
@@ -59,5 +105,21 @@ final class User_Settings {
 			update_user_meta( $user_id, self::META_DELIVERY_EMAIL, $delivery );
 		}
 		delete_user_meta( $user_id, 'wp2fa_delivery_email' );
+
+		$target = get_userdata( $user_id );
+		if ( ! $target instanceof \WP_User ) {
+			return;
+		}
+
+		$actor_id = get_current_user_id();
+		if ( self::can_set_mailer_transport( $actor_id, $target ) && isset( $_POST['wp_dual_check_mailer_transport'] ) ) {
+			$choice = sanitize_key( wp_unslash( (string) $_POST['wp_dual_check_mailer_transport'] ) );
+			if ( Mailer::USER_TRANSPORT_INHERIT === $choice || '' === $choice ) {
+				delete_user_meta( $user_id, self::META_MAIL_TRANSPORT );
+			} elseif ( in_array( $choice, Mailer::valid_transport_ids(), true ) ) {
+				update_user_meta( $user_id, self::META_MAIL_TRANSPORT, $choice );
+			}
+			delete_user_meta( $user_id, 'wp2fa_mailer_transport' );
+		}
 	}
 }

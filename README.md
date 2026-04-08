@@ -1,6 +1,6 @@
 # WP Dual Check
 
-Email-based second step after WordPress accepts your password. Pending state and code expiry use **transients**. Mail is sent with **Symfony Mailer** and a **DSN** (SMTP), not `wp_mail`.
+Email-based second step after WordPress accepts your password. Pending state and code expiry use **transients**. Mail can use **Symfony Mailer** (DSN, PHP `mail()`, or sendmail) or **`wp_mail()`**, per site default and optional per-user override.
 
 ## Requirements
 
@@ -21,10 +21,22 @@ Set via **environment variables**, **`.env`** in the plugin directory (optional)
 
 | Variable / constant | Purpose |
 |---------------------|---------|
-| `WP_DUAL_CHECK_MAILER_DSN` | Symfony Mailer DSN (preferred) |
+| `WP_DUAL_CHECK_MAILER_DSN` | Symfony Mailer DSN (generic SMTP, etc.) |
 | `WP_DUAL_CHECK_SECRET` | Optional HMAC secret (preferred) |
+| `WP_DUAL_CHECK_SENDGRID_API_KEY` | SendGrid API (overrides wp-admin field) |
+| `WP_DUAL_CHECK_MAILGUN_API_KEY` | Mailgun private API key |
+| `WP_DUAL_CHECK_MAILGUN_DOMAIN` | Mailgun sending domain |
+| `WP_DUAL_CHECK_MAILGUN_REGION` | `us` or `eu` |
+| `WP_DUAL_CHECK_SES_ACCESS_KEY` | Amazon SES access key ID |
+| `WP_DUAL_CHECK_SES_SECRET_KEY` | Amazon SES secret |
+| `WP_DUAL_CHECK_SES_REGION` | e.g. `us-east-1` |
+| `WP_DUAL_CHECK_POSTMARK_TOKEN` | Postmark server token |
+| `WP_DUAL_CHECK_GMAIL_ADDRESS` | Gmail address (Google SMTP transport) |
+| `WP_DUAL_CHECK_GMAIL_APP_PASSWORD` | [Google app password](https://support.google.com/accounts/answer/185833) (not OAuth) |
 
 Legacy names `WP2FA_MAILER_DSN` and `WP2FA_SECRET` are still read if the new names are empty.
+
+**Gmail OAuth2 (API):** Symfony’s `google-mailer` bridge only supports **SMTP + app password**, not full OAuth. For OAuth, use **wp_mail** with a Google plugin, or the **`wp_dual_check_symfony_dsn`** filter to supply a custom DSN/transport.
 
 Example in `wp-config.php`:
 
@@ -37,23 +49,21 @@ define( 'WP_DUAL_CHECK_MAILER_DSN', 'smtp://user:pass@mail.example.com:587' );
 Open **WP Dual Check** in the admin sidebar:
 
 1. Turn on **Require email verification code for every user after a correct password (all logins)** so **every** WordPress login (including `wp-admin`) must complete the email code step.
-2. Adjust expiry, attempts, resend cooldown, from name/email, and REST as needed.
+2. Choose **Default mail transport** — includes **SendGrid**, **Mailgun**, **Amazon SES**, **Postmark** (HTTP APIs), **Gmail (SMTP + app password)**, generic **DSN**, **wp_mail**, **PHP mail**, and **sendmail**.
+3. Under **API email providers**, enter keys for the provider you use (or rely on environment variables above). Secret fields left blank keep the previous saved value.
+4. Optional **Operations notes** field for your own reminders (SPF/DKIM, domain verification, etc.) — not sent with mail.
+5. Adjust expiry, attempts, resend cooldown, and from name/email as needed.
 
-### Optional: different inbox per user
+### Optional: different inbox or transport per user
 
-Under **Users → Profile**, users with permission can set **Login code delivery email** if codes should not go to their normal account email.
-
-## REST (optional)
-
-When enabled in the WP Dual Check admin screen:
-
-- `POST /wp-json/dual-check/v1/verify` — body: `token`, `code`
-- `POST /wp-json/dual-check/v1/resend` — body: `token`
+Under **Users → Profile**, administrators (or anyone who can edit other users) can set **Login code mail transport** to override the site default. Any user who can edit the profile can set **Login code delivery email** if codes should not go to their normal account email.
 
 ## Filters
 
 - `wp_dual_check_email_subject` — `( $subject, $user )`
 - `wp_dual_check_email_body` — `( $body, $user, $plain_code )`
+- `wp_dual_check_mail_transport_choices` — `( $choices )` associative array of transport id => label
+- `wp_dual_check_symfony_dsn` — `( $dsn, $transport, $user )` return a DSN string to override or replace built-in API DSNs (e.g. custom OAuth bridge)
 
 Legacy hooks `wp2fa_email_subject` / `wp2fa_email_body` are **not** fired; update any custom code to the names above.
 

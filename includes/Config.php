@@ -32,6 +32,13 @@ final class Config {
 		if ( false !== $env && '' !== $env ) {
 			return $env;
 		}
+		// createImmutable() loads .env into $_ENV / $_SERVER only (not putenv), so getenv() stays empty.
+		if ( isset( $_ENV[ $name ] ) && is_scalar( $_ENV[ $name ] ) && '' !== (string) $_ENV[ $name ] ) {
+			return (string) $_ENV[ $name ];
+		}
+		if ( isset( $_SERVER[ $name ] ) && is_scalar( $_SERVER[ $name ] ) && '' !== (string) $_SERVER[ $name ] ) {
+			return (string) $_SERVER[ $name ];
+		}
 		return $default;
 	}
 
@@ -89,9 +96,5 @@ final class Config {
 			return $name;
 		}
 		return (string) wp_specialchars_decode( get_option( 'blogname' ), ENT_QUOTES );
-	}
-
-	public static function rest_enabled(): bool {
-		return ! empty( Admin_Settings::merged()['rest_enabled'] );
 	}
 }

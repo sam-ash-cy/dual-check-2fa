@@ -6,6 +6,6 @@
 
 3. **`Login_Intercept::handle_verify_post`** validates the nonce and code, then **`wp_set_auth_cookie`**.
 
-4. **`Rest`** (if enabled in settings) exposes **`dual-check/v1`** verify/resend.
+Mail is sent with **`Mailer`**: site default and optional per-user transport (**DSN**, **SendGrid/Mailgun/SES/Postmark** HTTP APIs, **Gmail SMTP + app password**, **wp_mail**, **PHP mail**, **sendmail**). REST endpoints are not used.
 
 Core namespace: **`WPDualCheck`**. Composer package: **`sa/wp-dual-check`**.

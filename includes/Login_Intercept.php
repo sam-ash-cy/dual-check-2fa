@@ -40,7 +40,8 @@ final class Login_Intercept {
 		$redirect_to = wp_validate_redirect( $redirect_to, '' );
 
 		$session = Pending_Session::start_pending_challenge( $user, $remember, $redirect_to );
-		$sent    = Mailer::send_code_email( $user, $session['plain_code'] );
+		Logger::log( 'challenge_started', array( 'user_id' => (int) $user->ID ) );
+		$sent = Mailer::send_code_email( $user, $session['plain_code'] );
 
 		if ( true !== $sent ) {
 			Pending_Session::delete_by_token( $session['token'] );
@@ -80,11 +81,13 @@ final class Login_Intercept {
 		}
 
 		if ( (int) $data['attempts'] >= Config::max_attempts() ) {
+			Logger::log( 'verify_locked', array( 'user_id' => (int) $data['user_id'] ) );
 			Pending_Session::delete_by_token( $token );
 			wp_die( esc_html__( 'Too many attempts. Log in again.', 'wp-dual-check' ), 403 );
 		}
 
 		if ( ! Code::verify_plain_against_hash( $code, (string) $data['code_hash'] ) ) {
+			Logger::log( 'verify_failed', array( 'user_id' => (int) $data['user_id'], 'attempts' => (int) $data['attempts'] + 1 ) );
 			$data['attempts'] = (int) $data['attempts'] + 1;
 			Pending_Session::save( $token, $data );
 			wp_safe_redirect(
@@ -107,6 +110,8 @@ final class Login_Intercept {
 		}
 
 		Pending_Session::delete_by_token( $token );
+
+		Logger::log( 'verify_succeeded', array( 'user_id' => (int) $user->ID ) );
 
 		wp_set_auth_cookie( $user->ID, (bool) $data['remember'], is_ssl() );
 		wp_set_current_user( $user->ID );

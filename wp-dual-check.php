@@ -1,7 +1,7 @@
 <?php
 /**
  * Plugin Name:       WP Dual Check
- * Description:       Email-based second step after a correct password (Symfony Mailer + transients).
+ * Description:       Email-based second step after a correct password (configurable mail transport + transients).
  * Version:           1.0.0
  * Requires at least: 6.0
  * Requires PHP:      8.2
