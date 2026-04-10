@@ -23,17 +23,17 @@ define( 'WP_DUAL_CHECK_URL', plugin_dir_url( __FILE__ ) );
 
 $wdc_autoload = WP_DUAL_CHECK_PATH . 'vendor/autoload.php';
 if ( ! is_readable( $wdc_autoload ) ) {
-	add_action(
-		'admin_notices',
-		static function () {
-			echo '<div class="notice notice-error"><p>';
-			echo esc_html__( 'WP Dual Check: install dependencies first (run composer install in the plugin directory, or use a release package that includes the vendor folder).', 'wp-dual-check' );
-			echo '</p></div>';
-		}
-	);
 	return;
 }
 
 require_once $wdc_autoload;
 
-WPDualCheck\Plugin::instance()->boot();
+use WPDualCheck\Admin\Settings\SettingsRegistrar;
+use WPDualCheck\Auth\LoginInterceptor;
+use WPDualCheck\Core\Config;
+use WPDualCheck\User\UserSettings;
+
+Config::maybe_load_dotenv();
+SettingsRegistrar::register();
+UserSettings::register();
+LoginInterceptor::register();

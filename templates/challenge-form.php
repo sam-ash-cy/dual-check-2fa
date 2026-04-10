@@ -9,13 +9,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-$wdc_code_len = \WPDualCheck\Config::code_length_digits();
+$wdc_code_len = \WPDualCheck\Core\Config::code_length_digits();
 ?>
 <div id="wdc-challenge" class="wdc-challenge">
 	<form name="wdcverify" id="wdcverify" action="<?php echo esc_url( site_url( 'wp-login.php', 'login_post' ) ); ?>" method="post">
 		<input type="hidden" name="wdc_verify" value="1" />
 		<input type="hidden" name="wdc_token" value="<?php echo esc_attr( $token ); ?>" />
-		<?php echo $redirect_field; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built in Login_Intercept ?>
+		<?php echo $redirect_field; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- built in LoginInterceptor ?>
 		<?php wp_nonce_field( 'wdc_verify', 'wdc_nonce' ); ?>
 		<p>
 			<label for="wdc_code"><?php esc_html_e( 'Email login code', 'wp-dual-check' ); ?></label>
