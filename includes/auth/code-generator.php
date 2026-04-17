@@ -14,6 +14,9 @@ final class Code_Generator {
 
 	/**
 	 * Numeric OTP (each digit 0–9). Does not touch the dual_check table.
+	 *
+	 * @param int $length Desired length (clamped between 4 and 12).
+	 * @return string
 	 */
 	public static function numeric_digits(int $length): string {
 		$length = max(4, min(12, $length));

@@ -13,6 +13,11 @@ class User_Profile_Settings {
 
 	public const META_KEY = 'wp_dual_check_2fa_email';
 
+	/**
+	 * Hooks profile display and save handlers.
+	 *
+	 * @return void
+	 */
 	public function register(): void {
 		add_action('show_user_profile', array($this, 'render_field'));
 		add_action('edit_user_profile', array($this, 'render_field'));
@@ -20,6 +25,11 @@ class User_Profile_Settings {
 		add_action('edit_user_profile_update', array($this, 'save_field'));
 	}
 
+	/**
+	 * Whether the site allows users to set a separate 2FA delivery email.
+	 *
+	 * @return bool
+	 */
 	public static function profile_field_enabled(): bool {
 		$options = wp_parse_args(get_option(Settings_Page::OPTION_NAME, array()), Settings_Page::defaults());
 
@@ -28,6 +38,9 @@ class User_Profile_Settings {
 
 	/**
 	 * Address to send codes to: override meta if set and valid, else account email.
+	 *
+	 * @param int $user_id WordPress user ID.
+	 * @return string Empty if the user does not exist.
 	 */
 	public static function get_delivery_email(int $user_id): string {
 		$user = get_userdata($user_id);
@@ -45,7 +58,10 @@ class User_Profile_Settings {
 	}
 
 	/**
-	 * @param \WP_User $user
+	 * Outputs the optional “email for security codes” field when enabled and permitted.
+	 *
+	 * @param \WP_User $user User being edited or viewed.
+	 * @return void
 	 */
 	public function render_field($user): void {
 		if (!self::profile_field_enabled()) {
@@ -75,7 +91,10 @@ class User_Profile_Settings {
 	}
 
 	/**
-	 * @param int $user_id
+	 * Saves or clears the user meta override from the profile form.
+	 *
+	 * @param int $user_id User ID from the profile save action.
+	 * @return void
 	 */
 	public function save_field($user_id): void {
 		if (!self::profile_field_enabled()) {

@@ -18,6 +18,11 @@ require_once WP_DUAL_CHECK_PATH . 'includes/db/dual-check-database.php';
 
 require_once WP_DUAL_CHECK_PATH . 'includes/core/plugin-load.php';
 
+/**
+ * Loads the plugin after WordPress and other plugins are available.
+ *
+ * @return void
+ */
 function wp_dual_check_init() {
 	new \WP_DUAL_CHECK\core\PluginLoad();
 }

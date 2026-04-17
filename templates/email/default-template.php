@@ -10,6 +10,8 @@ defined('ABSPATH') || exit;
 
 /**
  * Plain subject line (placeholders replaced at send time).
+ *
+ * @return string
  */
 function wp_dual_check_email_default_subject(): string {
 	return '[site-name] ' . __('Your login security code', 'wp-dual-check');
@@ -17,6 +19,8 @@ function wp_dual_check_email_default_subject(): string {
 
 /**
  * HTML body fragment (inner table cell).
+ *
+ * @return string
  */
 function wp_dual_check_email_default_body(): string {
 	/* translators: Placeholder [expires] is replaced at send time. */
@@ -29,12 +33,20 @@ function wp_dual_check_email_default_body(): string {
 		. '<p>' . esc_html__('Site: [site-url]', 'wp-dual-check') . '</p>';
 }
 
-/** Header bar inner HTML. */
+/**
+ * Header bar inner HTML.
+ *
+ * @return string
+ */
 function wp_dual_check_email_default_header(): string {
 	return '<p style="margin:0;font-size:16px;font-weight:600;">' . esc_html__('Security code', 'wp-dual-check') . '</p>';
 }
 
-/** Footer strip inner HTML. */
+/**
+ * Footer strip inner HTML.
+ *
+ * @return string
+ */
 function wp_dual_check_email_default_footer(): string {
 	return '<p style="margin:0;font-size:12px;color:#50575e;">' . esc_html__('If you did not try to sign in, you can ignore this email.', 'wp-dual-check') . '</p>';
 }

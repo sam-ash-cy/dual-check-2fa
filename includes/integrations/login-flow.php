@@ -5,6 +5,7 @@ namespace WP_DUAL_CHECK\integrations;
 use WP_DUAL_CHECK\admin\Settings_Page;
 use WP_DUAL_CHECK\admin\User_Profile_Settings;
 use WP_DUAL_CHECK\auth\Code_Request_Cooldown;
+use WP_DUAL_CHECK\auth\Code_Step_Rate_Limit;
 use WP_DUAL_CHECK\auth\Code_Validator;
 use WP_DUAL_CHECK\auth\Token_Store;
 use WP_DUAL_CHECK\core\Security;
@@ -20,6 +21,14 @@ if (!defined('ABSPATH')) {
 /**
  * After a normal successful username + password, sends an email code and sends the browser to a separate
  * wp-login screen that only asks for that code (no second password on that screen).
+ *
+ * Filters (see each call site):
+ * - `wp_dual_check_site_requires_second_factor` — bool from saved option.
+ * - `wp_dual_check_skip_second_factor` — skip email step (bool, \WP_User); core pre-sets REST/XML‑RPC/cron.
+ * - `wp_dual_check_mail_provider` — in {@see \WP_DUAL_CHECK\delivery\get_default_mail_provider()}.
+ * - `wp_dual_check_code_step_ip_binding_enabled` — in {@see \WP_DUAL_CHECK\auth\Code_Step_Rate_Limit::is_binding_enabled()}.
+ * - `wp_dual_check_code_step_ip_max_fails`, `wp_dual_check_code_step_ip_lockout_seconds` — lockout tuning.
+ * - `wp_dual_check_record_code_step_failure` — whether to count a failed verify toward IP lockout (bool, reason, user id).
  */
 final class LoginFlow {
 
@@ -31,29 +40,56 @@ final class LoginFlow {
 
 	private const TRANSIENT_PREFIX = 'wpdc_sess_';
 
+	/**
+	 * Hooks the post-password redirect and the dedicated code-entry login action.
+	 *
+	 * @return void
+	 */
 	public function register(): void {
 		add_filter('wp_authenticate_user', array($this, 'after_password_ok_redirect_to_code_page'), 20, 2);
 		add_action('login_init', array($this, 'run_separate_code_page'), 0);
 		add_action('login_form_' . self::ACTION_CODE_PAGE, '__return_empty_string', 1);
 	}
 
+	/**
+	 * Whether site policy forces email second step for every user.
+	 *
+	 * @return bool
+	 */
 	private static function site_requires_second_factor(): bool {
-		return Settings_Page::is_2fa_required_for_all();
+		$required = Settings_Page::is_2fa_required_for_all();
+
+		/**
+		 * Filters whether the site requires the email second factor (option-driven baseline).
+		 *
+		 * @param bool $required Value from {@see Settings_Page::is_2fa_required_for_all()}.
+		 */
+		return (bool) apply_filters('wp_dual_check_site_requires_second_factor', $required);
 	}
 
+	/**
+	 * Transient key holding pending login state for a browser session token.
+	 *
+	 * @param string $session 48-character hex session id from the URL.
+	 * @return string
+	 */
 	private static function transient_name(string $session): string {
 		return self::TRANSIENT_PREFIX . $session;
 	}
 
 	/**
 	 * URL-safe token (hex only). Do not use sanitize_text_field() on it — that can change characters and break transient lookup.
+	 *
+	 * @return string
 	 */
 	private static function new_session_token(): string {
 		return bin2hex(random_bytes(24));
 	}
 
 	/**
-	 * @return string 48-char hex or '' if missing/invalid
+	 * Reads and normalises the session query arg (strict hex length check).
+	 *
+	 * @return string 48-character lowercase hex, or empty string if missing/invalid.
 	 */
 	private static function parse_session_from_request(): string {
 		if (!isset($_REQUEST[self::QUERY_SESSION])) {
@@ -64,6 +100,11 @@ final class LoginFlow {
 		return strlen($raw) === 48 ? strtolower($raw) : '';
 	}
 
+	/**
+	 * How long the pending-login transient may live (code lifetime plus one minute slack).
+	 *
+	 * @return int Seconds.
+	 */
 	private static function pending_session_ttl(): int {
 		$settings = dual_check_settings();
 		$minutes  = (int) $settings['code_lifetime_minutes'];
@@ -75,9 +116,11 @@ final class LoginFlow {
 	 * Runs only after WordPress has already validated username + password.
 	 * If 2FA is on: create session transient, email code, redirect to {@see ACTION_CODE_PAGE}. Otherwise return user.
 	 *
-	 * @param \WP_User|\WP_Error $user
-	 * @param string              $password
-	 * @return \WP_User|\WP_Error
+	 * Skips second step for REST, XML-RPC, and cron so programmatic logins are not blocked.
+	 *
+	 * @param \WP_User|\WP_Error $user      Authenticated user or prior error.
+	 * @param string             $password  Cleartext password (unused; required by the filter signature).
+	 * @return \WP_User|\WP_Error User to continue login, or error (e.g. cooldown, mail failure).
 	 */
 	public function after_password_ok_redirect_to_code_page($user, $password) {
 		if (!$user instanceof \WP_User) {
@@ -96,7 +139,19 @@ final class LoginFlow {
 			return $user;
 		}
 
+		$skip = false;
 		if ((defined('REST_REQUEST') && REST_REQUEST) || (defined('XMLRPC_REQUEST') && XMLRPC_REQUEST) || (defined('DOING_CRON') && DOING_CRON)) {
+			$skip = true;
+		}
+
+		/**
+		 * Filters whether to skip the email second factor for this login.
+		 *
+		 * @param bool     $skip Whether to skip 2FA (core pre-sets true for REST, XML‑RPC, cron).
+		 * @param \WP_User $user Authenticated user.
+		 */
+		$skip = (bool) apply_filters('wp_dual_check_skip_second_factor', $skip, $user);
+		if ($skip) {
 			return $user;
 		}
 
@@ -107,6 +162,27 @@ final class LoginFlow {
 				'user_login'  => $user->user_login,
 			)
 		);
+
+		$lock_wait = Code_Step_Rate_Limit::lock_seconds_remaining($user_id);
+		if ($lock_wait > 0) {
+			Logger::debug(
+				'twofa_failed',
+				array(
+					'user_id' => $user_id,
+					'reason'  => 'code_step_locked',
+					'wait'    => $lock_wait,
+				)
+			);
+
+			return new \WP_Error(
+				'dual_check_code_step_locked',
+				sprintf(
+					/* translators: %d: seconds until retry */
+					__('Too many wrong codes from this connection. Try again in %d seconds.', 'wp-dual-check'),
+					$lock_wait
+				)
+			);
+		}
 
 		$wait = Code_Request_Cooldown::seconds_remaining($user_id);
 		if ($wait > 0) {
@@ -164,6 +240,7 @@ final class LoginFlow {
 		$session = self::new_session_token();
 		$remember = !empty($_POST['rememberme']);
 		$raw_redirect = isset($_POST['redirect_to']) ? wp_unslash((string) $_POST['redirect_to']) : '';
+		// Persist redirect target in the transient so the code step can finish with the same destination as wp-login.
 		$redirect_to  = wp_validate_redirect($raw_redirect, admin_url());
 
 		set_transient(
@@ -199,6 +276,8 @@ final class LoginFlow {
 
 	/**
 	 * Own login route: only the code form (handled before the default username/password screen runs).
+	 *
+	 * @return void
 	 */
 	public function run_separate_code_page(): void {
 		if (!isset($_REQUEST['action']) || $_REQUEST['action'] !== self::ACTION_CODE_PAGE) {
@@ -234,6 +313,22 @@ final class LoginFlow {
 			return;
 		}
 
+		$user_id_pending = (int) $pending['user_id'];
+		$lock_wait       = Code_Step_Rate_Limit::lock_seconds_remaining($user_id_pending);
+		if ($lock_wait > 0) {
+			$errors = new \WP_Error(
+				'dual_check_code_step_locked',
+				sprintf(
+					/* translators: %d: seconds until retry */
+					__('Too many wrong codes. Try again in %d seconds.', 'wp-dual-check'),
+					$lock_wait
+				)
+			);
+			$this->render_code_page($session, $errors);
+
+			return;
+		}
+
 		if ('POST' === $_SERVER['REQUEST_METHOD'] && isset($_POST['wp_dual_check_nonce'])) {
 			$this->handle_code_page_post($session, $pending);
 
@@ -243,6 +338,13 @@ final class LoginFlow {
 		$this->render_code_page($session, new \WP_Error());
 	}
 
+	/**
+	 * Validates nonce and code, consumes the challenge row, then sets auth cookies and redirects.
+	 *
+	 * @param string               $session Opaque session token from the request.
+	 * @param array<string, mixed> $pending Transient payload: user_id, challenge_id, remember, redirect_to.
+	 * @return void
+	 */
 	private function handle_code_page_post(string $session, array $pending): void {
 		if (!isset($_POST['wp_dual_check_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash((string) $_POST['wp_dual_check_nonce'])), 'wp_dual_check_submit')) {
 			Logger::debug(
@@ -255,7 +357,31 @@ final class LoginFlow {
 			wp_die(esc_html__('Invalid request. Go back and try again.', 'wp-dual-check'), esc_html__('Security check failed', 'wp-dual-check'), 400);
 		}
 
-		$user_id      = (int) $pending['user_id'];
+		$user_id = (int) $pending['user_id'];
+
+		$lock_wait = Code_Step_Rate_Limit::lock_seconds_remaining($user_id);
+		if ($lock_wait > 0) {
+			Logger::debug(
+				'twofa_failed',
+				array(
+					'user_id' => $user_id,
+					'reason'  => 'code_step_locked',
+					'wait'    => $lock_wait,
+				)
+			);
+			$errors = new \WP_Error(
+				'dual_check_code_step_locked',
+				sprintf(
+					/* translators: %d: seconds until retry */
+					__('Too many wrong codes. Try again in %d seconds.', 'wp-dual-check'),
+					$lock_wait
+				)
+			);
+			$this->render_code_page($session, $errors);
+
+			return;
+		}
+
 		$challenge_id = isset($pending['challenge_id']) ? (int) $pending['challenge_id'] : 0;
 		$code         = Security::sanitise_code_from_request(self::POST_CODE_KEY);
 
@@ -274,6 +400,7 @@ final class LoginFlow {
 			return;
 		}
 
+		// Verify against this specific DB row only (prevents guessing an older code after a re-issue).
 		$row = Code_Validator::verify_login_challenge($code, $user_id, $challenge_id);
 		if ($row === false) {
 			Logger::debug(
@@ -284,12 +411,23 @@ final class LoginFlow {
 					'reason'       => 'wrong_code',
 				)
 			);
+			/**
+			 * Filters whether a failed verify should count toward IP + user lockout.
+			 *
+			 * @param bool   $record  Default true for wrong/expired code rows.
+			 * @param string $reason  Internal reason key (`wrong_code`).
+			 * @param int    $user_id User id from the pending session.
+			 */
+			if (apply_filters('wp_dual_check_record_code_step_failure', true, 'wrong_code', $user_id)) {
+				Code_Step_Rate_Limit::record_failed_verify($user_id);
+			}
 			$errors = new \WP_Error('dual_check_invalid', __('That code is wrong or expired. Try again.', 'wp-dual-check'));
 			$this->render_code_page($session, $errors);
 
 			return;
 		}
 
+		// Single-use: mark consumed before setting cookies so the same code cannot complete two sessions.
 		if (!Token_Store::consume_row((int) $row['id'])) {
 			Logger::debug(
 				'twofa_failed',
@@ -305,6 +443,8 @@ final class LoginFlow {
 
 			return;
 		}
+
+		Code_Step_Rate_Limit::clear_counters($user_id);
 
 		delete_transient(self::transient_name($session));
 
@@ -344,6 +484,13 @@ final class LoginFlow {
 		exit;
 	}
 
+	/**
+	 * Outputs the HTML code form on wp-login.php and stops execution.
+	 *
+	 * @param string    $session Opaque session token (echoed in hidden field).
+	 * @param \WP_Error $errors  Errors to show above the form.
+	 * @return void
+	 */
 	private function render_code_page(string $session, \WP_Error $errors): void {
 		$message = '<p class="message">' . esc_html__('Check your email, then enter the security code below.', 'wp-dual-check') . '</p>';
 		login_header(__('Security code', 'wp-dual-check'), $message, $errors);
@@ -371,6 +518,11 @@ final class LoginFlow {
 		exit;
 	}
 
+	/**
+	 * Friendly message when the session transient is missing or invalid.
+	 *
+	 * @return void
+	 */
 	private function render_code_page_expired(): void {
 		$errors = new \WP_Error(
 			'dual_check_session',
@@ -382,6 +534,13 @@ final class LoginFlow {
 		exit;
 	}
 
+	/**
+	 * Builds and sends the login code email via the default mail provider.
+	 *
+	 * @param \WP_User             $user   User receiving the code.
+	 * @param array{plain: string, id: int} $issued From {@see Token_Store::issue_login_challenge()}.
+	 * @return true|\WP_Error True on success; WP_Error if no address or send failed.
+	 */
 	private function deliver_login_challenge_email(\WP_User $user, array $issued) {
 		$to = User_Profile_Settings::get_delivery_email((int) $user->ID);
 		if ($to === '') {

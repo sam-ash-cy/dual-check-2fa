@@ -31,6 +31,10 @@ final class Login_Email_Builder {
 	);
 
 	/**
+	 * Builds subject and full HTML for a login code email.
+	 *
+	 * @param string $code        Plaintext code to embed.
+	 * @param string $user_login  Account login for placeholders.
 	 * @return array{subject: string, html: string}
 	 */
 	public static function build(string $code, string $user_login): array {
@@ -43,11 +47,22 @@ final class Login_Email_Builder {
 		);
 	}
 
+	/**
+	 * Whether saved custom subject/body/header/footer should be used instead of bundled defaults.
+	 *
+	 * @param array<string, mixed> $settings Merged plugin options.
+	 * @return bool
+	 */
 	private static function use_custom_email_template(array $settings): bool {
 		return !empty($settings['email_use_custom_template']);
 	}
 
-	/** Load templates/email/default-template.php once and call the part function. */
+	/**
+	 * Loads `templates/email/default-template.php` once and returns one part (subject/body/header/footer).
+	 *
+	 * @param string $part Key in {@see Login_Email_Builder::DEFAULT_TEMPLATE_FN}.
+	 * @return string Trimmed string, or empty if missing.
+	 */
 	private static function default_template_part(string $part): string {
 		if (!isset(self::DEFAULT_TEMPLATE_FN[ $part ])) {
 			return '';
@@ -70,8 +85,11 @@ final class Login_Email_Builder {
 	}
 
 	/**
-	 * @param array<string, mixed> $settings
-	 * @param array<string, string> $ctx
+	 * Builds the subject line with placeholders stripped to plain text.
+	 *
+	 * @param array<string, mixed>   $settings Merged plugin options.
+	 * @param array<string, string> $ctx      Placeholder values from {@see context_values()}.
+	 * @return string
 	 */
 	private static function build_subject(array $settings, array $ctx): string {
 		if (!self::use_custom_email_template($settings)) {
@@ -109,8 +127,11 @@ final class Login_Email_Builder {
 	}
 
 	/**
-	 * @param array<string, mixed> $settings
-	 * @param array<string, string> $ctx
+	 * Builds the inner HTML fragment (inside the styled wrapper) with escaped placeholders.
+	 *
+	 * @param array<string, mixed>   $settings Merged plugin options.
+	 * @param array<string, string> $ctx      Raw placeholder values.
+	 * @return string
 	 */
 	private static function build_body_inner(array $settings, array $ctx): string {
 		if (!self::use_custom_email_template($settings)) {
@@ -131,6 +152,8 @@ final class Login_Email_Builder {
 	}
 
 	/**
+	 * Maps raw placeholder values to HTML-safe replacements per token type.
+	 *
 	 * @param array<string, string> $ctx Raw placeholder values from {@see context_values()}.
 	 * @return array<string, string>
 	 */
@@ -143,6 +166,13 @@ final class Login_Email_Builder {
 		return $html_ctx;
 	}
 
+	/**
+	 * Escapes a placeholder value for safe HTML output (URL vs text).
+	 *
+	 * @param string $token Placeholder key, e.g. `[site-url]`.
+	 * @param string $value Raw replacement.
+	 * @return string
+	 */
 	private static function escape_placeholder_for_html(string $token, string $value): string {
 		if ($token === '[site-url]') {
 			return esc_url($value);
@@ -152,7 +182,11 @@ final class Login_Email_Builder {
 	}
 
 	/**
-	 * @param array<string, string> $pairs Token => replacement (already escaped for context).
+	 * Case-insensitive token replacement in a template string.
+	 *
+	 * @param string               $template Original text/HTML.
+	 * @param array<string, string> $pairs    Token => replacement (already escaped for context).
+	 * @return string
 	 */
 	private static function replace_tokens(string $template, array $pairs): string {
 		$out = $template;
@@ -164,6 +198,10 @@ final class Login_Email_Builder {
 	}
 
 	/**
+	 * Builds placeholder map for the current send (site name, code, human expiry, etc.).
+	 *
+	 * @param string $code        Plaintext code.
+	 * @param string $user_login  Username for templates.
 	 * @return array<string, string>
 	 */
 	private static function context_values(string $code, string $user_login): array {
@@ -183,6 +221,11 @@ final class Login_Email_Builder {
 		);
 	}
 
+	/**
+	 * Fallback inner HTML when neither custom nor default-template body is available.
+	 *
+	 * @return string
+	 */
 	private static function default_body_template(): string {
 		/* translators: Placeholder [expires] is replaced at send time; do not translate bracket tokens. */
 		$expiry_line = esc_html__('Valid until [expires].', 'wp-dual-check');
@@ -195,8 +238,12 @@ final class Login_Email_Builder {
 	}
 
 	/**
-	 * @param array<string, mixed>   $settings
-	 * @param array<string, string> $ctx Raw values for header/footer placeholders.
+	 * Wraps inner HTML in a simple responsive table layout with header/footer strips.
+	 *
+	 * @param array<string, mixed>   $settings   Colours and optional custom header/footer HTML.
+	 * @param string                 $inner_html Body fragment (already token-replaced).
+	 * @param array<string, string> $ctx        Raw values for header/footer placeholders.
+	 * @return string Full HTML document string.
 	 */
 	private static function build_html_wrapper(array $settings, string $inner_html, array $ctx): string {
 		$link   = isset($settings['email_color_link']) ? (string) $settings['email_color_link'] : '#2271b1';

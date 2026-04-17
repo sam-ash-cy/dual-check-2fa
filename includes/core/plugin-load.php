@@ -6,13 +6,26 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
+/**
+ * Bootstrap: loads PHP dependencies and registers hooks.
+ */
 class PluginLoad {
 
+	/**
+	 * Loads includes and registers WordPress hooks.
+	 *
+	 * @return void
+	 */
 	public function __construct() {
 		$this->load_dependencies();
 		$this->init_hooks();
 	}
 
+	/**
+	 * Loads all plugin PHP files (auth, admin, integrations, etc.).
+	 *
+	 * @return void
+	 */
 	private function load_dependencies(): void {
 		require_once WP_DUAL_CHECK_PATH . 'includes/core/security.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/core/plugin.php';
@@ -27,6 +40,7 @@ class PluginLoad {
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/two-factor-service.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-interface.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
+		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-step-rate-limit.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-request-cooldown.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/email-settings-page.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/user-profile-settings.php';
@@ -34,6 +48,11 @@ class PluginLoad {
 		require_once WP_DUAL_CHECK_PATH . 'includes/integrations/login-flow.php';
 	}
 
+	/**
+	 * Registers the login second step and admin screens when in wp-admin.
+	 *
+	 * @return void
+	 */
 	private function init_hooks(): void {
 
 		(new \WP_DUAL_CHECK\integrations\LoginFlow())->register();

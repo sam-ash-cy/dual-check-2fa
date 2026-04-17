@@ -21,7 +21,9 @@ const WP_DUAL_CHECK_DB_SCHEMA_VERSION = '1.1.0';
 const DUAL_CHECK_TOKEN_TYPE_LOGIN = 'login';
 
 /**
- * Returns the name of the table.
+ * Returns the full prefixed database table name for token rows.
+ *
+ * @global \wpdb $wpdb WordPress database abstraction object.
  * @return string
  */
 function get_table_name() {
@@ -74,6 +76,12 @@ function dual_check_settings(): array {
 	return \WP_DUAL_CHECK\admin\Settings_Page::normalize_email_settings($clamped);
 }
 
+/**
+ * Runs on activation and on `plugins_loaded` when the saved schema version is behind {@see WP_DUAL_CHECK_DB_SCHEMA_VERSION}.
+ *
+ * @global \wpdb $wpdb WordPress database abstraction object.
+ * @return void
+ */
 $dual_check_database_install = static function (): void {
 	global $wpdb;
 
@@ -112,6 +120,7 @@ if (defined('WP_DUAL_CHECK_FILE')) {
 	register_activation_hook(WP_DUAL_CHECK_FILE, $dual_check_database_install);
 }
 
+// Early priority so other plugin code can rely on the table existing when their hooks run.
 add_action(
 	'plugins_loaded',
 	static function () use ($dual_check_database_install): void {
@@ -123,9 +132,10 @@ add_action(
 );
 
 /**
- * Generates a hash of the given value.
- * @param string $value
- * @return string|false
+ * HMAC-SHA256 of the plaintext code using the WordPress auth salt.
+ *
+ * @param string|null $value Plaintext token; empty yields false.
+ * @return string|false Hex digest, or false if input is empty.
  */
 function generate_token_hash($value) {
 	if ($value === '' || $value === null) {
@@ -137,10 +147,13 @@ function generate_token_hash($value) {
 
 /**
  * Inserts a new token row. Returns the plaintext secret (deliver to user) and row id, or false on failure.
- * @param int|string      $user_id
- * @param string          $token_type
- * @param string          $context
- * @param int|string|null $expires_at
+ *
+ * Login-type tokens invalidate prior unconsumed login rows for the same user so only the latest code works.
+ *
+ * @param int|string         $user_id    WordPress user ID.
+ * @param string             $token_type Row discriminator (e.g. {@see DUAL_CHECK_TOKEN_TYPE_LOGIN}).
+ * @param string             $context    Short free-text context (stored truncated).
+ * @param int|string|null    $expires_at MySQL datetime or strtotime()-parseable string; null uses settings lifetime.
  * @return array{plain: string, id: int}|false
  */
 function add_dual_check_token($user_id, $token_type, $context = '', $expires_at = null) {
@@ -235,6 +248,9 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 
 /**
  * Marks any unconsumed login challenges for this user as used so only the newest issue stays valid.
+ *
+ * @param int $user_id WordPress user ID.
+ * @return void
  */
 function invalidate_prior_login_challenges(int $user_id): void {
 	if ($user_id <= 0) {
@@ -259,7 +275,13 @@ function invalidate_prior_login_challenges(int $user_id): void {
 /**
  * Verifies a code against one challenge row (by DB id). Ties verification to the issued challenge, not a broad user scan.
  *
- * @return array<string, mixed>|false
+ * On mismatch, increments `attempts` until `max_attempts` from settings is reached.
+ *
+ * @param int    $challenge_id Primary key of the token row.
+ * @param int    $user_id      Expected owner of the row.
+ * @param string $token_type   Must match the row’s token_type.
+ * @param string $plain_token  Submitted code (plaintext).
+ * @return array<string, mixed>|false Full row on success; false if missing, expired, exhausted, or wrong code.
  */
 function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string $token_type, string $plain_token) {
 	if ($challenge_id <= 0 || $user_id <= 0 || $token_type === '' || $plain_token === '') {
@@ -372,6 +394,9 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 
 /**
  * Marks a token row used so it cannot be verified again.
+ *
+ * @param int $row_id Primary key of the token row.
+ * @return bool True if a row was updated; false if id invalid or already consumed.
  */
 function mark_dual_check_token_consumed(int $row_id): bool {
 	if ($row_id <= 0) {

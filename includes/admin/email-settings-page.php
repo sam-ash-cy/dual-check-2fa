@@ -11,10 +11,18 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
+/**
+ * Admin screen for login email subject/body/colours and test send.
+ */
 final class Email_Settings_Page implements Admin_Settings_Page {
 
 	public const PAGE = 'wp-dual-check-email';
 
+	/**
+	 * Registers submenu, settings sections, assets, and test-email handler.
+	 *
+	 * @return void
+	 */
 	public function register(): void {
 		add_action('admin_menu', array($this, 'add_menu'), 11);
 		add_action('admin_init', array($this, 'register_fields'), 20);
@@ -22,17 +30,33 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		add_action('admin_post_wp_dual_check_test_email', array($this, 'handle_test_email_post'));
 	}
 
+	/**
+	 * Adds the “Login Email Template” submenu under WP Dual Check.
+	 *
+	 * @return void
+	 */
 	public function add_menu(): void {
-		add_submenu_page(
-			Settings_Page::MENU_SLUG,
-			__('Login Email Template', 'wp-dual-check'),
-			__('Login Email Template', 'wp-dual-check'),
-			'manage_options',
-			self::PAGE,
-			array($this, 'render_page')
-		);
+
+		$settings = dual_check_settings();
+
+		//if the user has enabled the email settings page, add the submenu page
+		if ($settings['email_use_custom_template']) {
+			add_submenu_page(
+				Settings_Page::MENU_SLUG,
+				__('Login Email Template', 'wp-dual-check'),
+				__('Login Email Template', 'wp-dual-check'),
+				'manage_options',
+				self::PAGE,
+				array($this, 'render_page')
+			);
+		}
 	}
 
+	/**
+	 * Registers settings sections and fields on the email template admin page.
+	 *
+	 * @return void
+	 */
 	public function register_fields(): void {
 		add_settings_section(
 			'wpdc_email_body',
@@ -91,6 +115,12 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Loads the colour picker on the email settings screen only.
+	 *
+	 * @param string $hook Current admin page hook suffix.
+	 * @return void
+	 */
 	public function enqueue_colors(string $hook): void {
 		if ($hook !== Settings_Page::MENU_SLUG . '_page_' . self::PAGE) {
 			return;
@@ -104,6 +134,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Renders the email template form and test-email form.
+	 *
+	 * @return void
+	 */
 	public function render_page(): void {
 		if (!current_user_can('manage_options')) {
 			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'));
@@ -129,6 +164,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		echo '</form></div>';
 	}
 
+	/**
+	 * Sends a sample login email to the current admin user’s address.
+	 *
+	 * @return void
+	 */
 	public function handle_test_email_post(): void {
 		if (!current_user_can('manage_options')) {
 			wp_die(esc_html__('You do not have permission to do this.', 'wp-dual-check'));
@@ -152,6 +192,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		exit;
 	}
 
+	/**
+	 * Shows one-off admin notices after redirect from test email handler.
+	 *
+	 * @return void
+	 */
 	private function render_query_flash_notice(): void {
 		if (!isset($_GET['wpdc_msg'])) {
 			return;
@@ -206,12 +251,22 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		return $out;
 	}
 
+	/**
+	 * Prints help text for email placeholders above the template fields.
+	 *
+	 * @return void
+	 */
 	public function section_intro(): void {
 		$list = '[site-name], [code], [user-login], [expires], [site-url]';
 		echo '<p>' . esc_html__('Placeholders in subject and body are replaced when mail is sent.', 'wp-dual-check') . '</p>';
 		echo '<p class="description"><code>' . esc_html($list) . '</code></p>';
 	}
 
+	/**
+	 * Renders the email subject textarea.
+	 *
+	 * @return void
+	 */
 	public function field_subject(): void {
 		$v = (string) (dual_check_settings()['email_subject_template'] ?? '');
 		printf(
@@ -222,6 +277,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		echo '<p class="description">' . esc_html__('If empty, the default subject will be used.', 'wp-dual-check') . '</p>';
 	}
 
+	/**
+	 * Renders the HTML body textarea.
+	 *
+	 * @return void
+	 */
 	public function field_body(): void {
 		$v = (string) (dual_check_settings()['email_body_template'] ?? '');
 		printf(
@@ -232,6 +292,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		echo '<p class="description">' . esc_html__('If empty, the default body will be used.', 'wp-dual-check') . '</p>';
 	}
 
+	/**
+	 * Renders optional header HTML for the mail wrapper.
+	 *
+	 * @return void
+	 */
 	public function field_header(): void {
 		$v = (string) (dual_check_settings()['email_header_html'] ?? '');
 		printf(
@@ -241,6 +306,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Renders optional footer HTML for the mail wrapper.
+	 *
+	 * @return void
+	 */
 	public function field_footer(): void {
 		$v = (string) (dual_check_settings()['email_footer_html'] ?? '');
 		printf(
@@ -250,6 +320,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Renders colour picker inputs for link/header/footer backgrounds.
+	 *
+	 * @return void
+	 */
 	public function field_colors(): void {
 		$o      = dual_check_settings();
 		$link   = (string) ($o['email_color_link'] ?? '#2271b1');

@@ -6,6 +6,9 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
+/**
+ * General WP Dual Check settings: option registration, sanitization, and field callbacks.
+ */
 final class Settings_Page implements Admin_Settings_Page {
 
 	public const OPTION_NAME = 'wp_dual_check_settings';
@@ -28,11 +31,29 @@ final class Settings_Page implements Admin_Settings_Page {
 
 	public const CODE_RESEND_COOLDOWN_MAX = 900;
 
+	public const CODE_STEP_IP_MAX_FAILS_MIN = 3;
+
+	public const CODE_STEP_IP_MAX_FAILS_MAX = 30;
+
+	public const CODE_STEP_IP_LOCKOUT_MIN = 60;
+
+	public const CODE_STEP_IP_LOCKOUT_MAX = 3600;
+
+	/**
+	 * Hooks admin menu and Settings API registration.
+	 *
+	 * @return void
+	 */
 	public function register(): void {
 		add_action('admin_menu', array($this, 'add_main_menu'));
 		add_action('admin_init', array($this, 'register_settings'));
 	}
 
+	/**
+	 * Adds the top-level admin menu and duplicate “General” submenu entry.
+	 *
+	 * @return void
+	 */
 	public function add_main_menu(): void {
 		add_menu_page(
 			__('WP Dual Check', 'wp-dual-check'),
@@ -53,6 +74,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Registers the option, sections, and fields for this screen.
+	 *
+	 * @return void
+	 */
 	public function register_settings(): void {
 		register_setting(
 			'wp_dual_check_settings_group',
@@ -118,6 +144,37 @@ final class Settings_Page implements Admin_Settings_Page {
 			'wp_dual_check_limits'
 		);
 
+		add_settings_section(
+			'wp_dual_check_code_step_ip',
+			__('Code step & IP binding', 'wp-dual-check'),
+			array($this, 'section_code_step_ip'),
+			self::MENU_SLUG
+		);
+
+		add_settings_field(
+			'code_step_ip_rate_limit_enabled',
+			__('IP + user binding', 'wp-dual-check'),
+			array($this, 'field_code_step_ip_rate_limit_enabled'),
+			self::MENU_SLUG,
+			'wp_dual_check_code_step_ip'
+		);
+
+		add_settings_field(
+			'code_step_ip_max_fails',
+			__('Wrong codes before lockout', 'wp-dual-check'),
+			array($this, 'field_code_step_ip_max_fails'),
+			self::MENU_SLUG,
+			'wp_dual_check_code_step_ip'
+		);
+
+		add_settings_field(
+			'code_step_ip_lockout_seconds',
+			__('Lockout duration (seconds)', 'wp-dual-check'),
+			array($this, 'field_code_step_ip_lockout_seconds'),
+			self::MENU_SLUG,
+			'wp_dual_check_code_step_ip'
+		);
+
 		add_settings_field(
 			'email_use_custom_template',
 			__('Use custom email template', 'wp-dual-check'),
@@ -158,7 +215,9 @@ final class Settings_Page implements Admin_Settings_Page {
 	}
 
 	/**
-	 * @param array<string, mixed>|null $input
+	 * Merges posted values into the stored option; supports split saves via `save_context` (main vs email).
+	 *
+	 * @param array<string, mixed>|null $input Raw `$_POST` slice for {@see Settings_Page::OPTION_NAME}.
 	 * @return array<string, mixed>
 	 */
 	public function sanitize($input): array {
@@ -168,6 +227,7 @@ final class Settings_Page implements Admin_Settings_Page {
 			return self::normalize_email_settings(self::clamp_numeric_settings($out));
 		}
 
+		// Email template screen posts the same option name but only a subset of keys; merge without wiping numerics.
 		$ctx = isset($input['save_context']) ? sanitize_key((string) $input['save_context']) : 'main';
 		unset($input['save_context']);
 
@@ -205,10 +265,22 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 		$out['allow_profile_2fa_email'] = !empty($input['allow_profile_2fa_email']) ? 1 : 0;
 		$out['require_2fa_all_users']    = !empty($input['require_2fa_all_users']) ? 1 : 0;
+		if (isset($input['code_step_ip_max_fails'])) {
+			$out['code_step_ip_max_fails'] = absint($input['code_step_ip_max_fails']);
+		}
+		if (isset($input['code_step_ip_lockout_seconds'])) {
+			$out['code_step_ip_lockout_seconds'] = absint($input['code_step_ip_lockout_seconds']);
+		}
+		$out['code_step_ip_rate_limit_enabled'] = !empty($input['code_step_ip_rate_limit_enabled']) ? 1 : 0;
 
 		return self::normalize_email_settings(self::clamp_numeric_settings($out));
 	}
 
+	/**
+	 * Renders the “Code expiration” number field.
+	 *
+	 * @return void
+	 */
 	public function field_code_lifetime(): void {
 		$opts = self::clamp_numeric_settings(wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults()));
 		$v    = (int) $opts['code_lifetime_minutes'];
@@ -221,6 +293,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Renders the “Max verification attempts” number field.
+	 *
+	 * @return void
+	 */
 	public function field_max_attempts(): void {
 		$opts = self::clamp_numeric_settings(wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults()));
 		$v    = (int) $opts['max_attempts'];
@@ -233,6 +310,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Renders the generated login code length field.
+	 *
+	 * @return void
+	 */
 	public function field_code_length(): void {
 		$opts = self::clamp_numeric_settings(wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults()));
 		$v    = (int) $opts['code_length'];
@@ -245,6 +327,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Renders the minimum seconds between new login codes field.
+	 *
+	 * @return void
+	 */
 	public function field_code_resend_cooldown(): void {
 		$opts = self::clamp_numeric_settings(wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults()));
 		$v    = (int) $opts['code_resend_cooldown_seconds'];
@@ -255,9 +342,77 @@ final class Settings_Page implements Admin_Settings_Page {
 			self::CODE_RESEND_COOLDOWN_MIN,
 			self::CODE_RESEND_COOLDOWN_MAX
 		);
-		echo '<p class="description">' . esc_html__('Applies per account when that user requests a login code. Reduces mail spam and guessing.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('When IP binding is off: applies per WordPress user only. When IP binding is on: the same interval is tracked per IP address and user together, so one client cannot burn codes for many accounts.', 'wp-dual-check') . '</p>';
 	}
 
+	/**
+	 * Intro text for the IP + user code-step section.
+	 *
+	 * @return void
+	 */
+	public function section_code_step_ip(): void {
+		echo '<p class="description">' . esc_html__('When enabled, wrong security codes are counted per IP address and user. After too many failures, that client cannot submit codes or request a new email for the lockout period. The “minimum time between new login codes” setting above uses the same IP + user key instead of user only.', 'wp-dual-check') . '</p>';
+	}
+
+	/**
+	 * Renders the IP + user binding toggle.
+	 *
+	 * @return void
+	 */
+	public function field_code_step_ip_rate_limit_enabled(): void {
+		$opts    = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
+		$checked = !empty($opts['code_step_ip_rate_limit_enabled']);
+		$n       = self::OPTION_NAME;
+		printf('<input type="hidden" name="%s[code_step_ip_rate_limit_enabled]" value="0" />', esc_attr($n));
+		printf(
+			'<label for="wpdc_code_step_ip_binding"><input type="checkbox" id="wpdc_code_step_ip_binding" name="%1$s[code_step_ip_rate_limit_enabled]" value="1" %2$s /> %3$s</label>',
+			esc_attr($n),
+			checked($checked, true, false),
+			esc_html__('Limit the code step and resend cooldown by IP + user', 'wp-dual-check')
+		);
+	}
+
+	/**
+	 * Renders max wrong code attempts before lockout.
+	 *
+	 * @return void
+	 */
+	public function field_code_step_ip_max_fails(): void {
+		$opts = self::clamp_numeric_settings(wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults()));
+		$v    = (int) $opts['code_step_ip_max_fails'];
+		printf(
+			'<input type="number" name="%1$s[code_step_ip_max_fails]" value="%2$d" min="%3$d" max="%4$d" class="small-text" />',
+			esc_attr(self::OPTION_NAME),
+			$v,
+			self::CODE_STEP_IP_MAX_FAILS_MIN,
+			self::CODE_STEP_IP_MAX_FAILS_MAX
+		);
+		echo '<p class="description">' . esc_html__('Only used when IP binding is on. Separate from “max verification attempts” on each issued code.', 'wp-dual-check') . '</p>';
+	}
+
+	/**
+	 * Renders lockout length after too many wrong codes.
+	 *
+	 * @return void
+	 */
+	public function field_code_step_ip_lockout_seconds(): void {
+		$opts = self::clamp_numeric_settings(wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults()));
+		$v    = (int) $opts['code_step_ip_lockout_seconds'];
+		printf(
+			'<input type="number" name="%1$s[code_step_ip_lockout_seconds]" value="%2$d" min="%3$d" max="%4$d" class="small-text" />',
+			esc_attr(self::OPTION_NAME),
+			$v,
+			self::CODE_STEP_IP_LOCKOUT_MIN,
+			self::CODE_STEP_IP_LOCKOUT_MAX
+		);
+		echo '<p class="description">' . esc_html__('How long the IP + user pair is blocked from the code step and from requesting another login code.', 'wp-dual-check') . '</p>';
+	}
+
+	/**
+	 * Renders the file debug logging toggle.
+	 *
+	 * @return void
+	 */
 	public function field_debug_logging(): void {
 		$opts = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
 		$on   = !empty($opts['debug_logging']);
@@ -273,6 +428,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		echo '<p class="description">' . esc_html__('File:', 'wp-dual-check') . ' <code>' . esc_html($dir !== '' ? trailingslashit($dir) . 'debug.log' : '') . '</code></p>';
 	}
 
+	/**
+	 * Renders whether subject/body/header/footer come from settings or bundled defaults.
+	 *
+	 * @return void
+	 */
 	public function field_email_use_custom_template(): void {
 		$opts = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
 		$on   = !empty($opts['email_use_custom_template']);
@@ -286,6 +446,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Renders the option to show the alternate 2FA email field on user profiles.
+	 *
+	 * @return void
+	 */
 	public function field_allow_profile_2fa_email(): void {
 		$opts    = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
 		$checked = !empty($opts['allow_profile_2fa_email']);
@@ -297,6 +462,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	/**
+	 * Renders the “require 2FA for everyone” policy toggle.
+	 *
+	 * @return void
+	 */
 	public function field_require_2fa_all_users(): void {
 		$opts    = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
 		$checked = !empty($opts['require_2fa_all_users']);
@@ -309,6 +479,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		echo '<p class="description">' . esc_html__('This is off by default to prevent locking out users.', 'wp-dual-check') . '</p>';
 	}
 
+	/**
+	 * Outputs the General settings form.
+	 *
+	 * @return void
+	 */
 	public function render_page(): void {
 		if (!current_user_can('manage_options')) {
 			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'));
@@ -324,6 +499,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		echo '</form></div>';
 	}
 
+	/**
+	 * Default option values when keys are missing from the database.
+	 *
+	 * @return array<string, mixed>
+	 */
 	public static function defaults(): array {
 		return array(
 			'code_lifetime_minutes'      => 10,
@@ -340,10 +520,18 @@ final class Settings_Page implements Admin_Settings_Page {
 			'email_color_footer_bg'      => '#f0f0f1',
 			'email_use_custom_template'  => 0,
 			'code_resend_cooldown_seconds' => 30,
-			'debug_logging'              => 0,
+			'debug_logging'                => 0,
+			'code_step_ip_rate_limit_enabled' => 0,
+			'code_step_ip_max_fails'      => 5,
+			'code_step_ip_lockout_seconds' => 300,
 		);
 	}
 
+	/**
+	 * Whether “require dual-check for everyone” is enabled in saved options.
+	 *
+	 * @return bool
+	 */
 	public static function is_2fa_required_for_all(): bool {
 		$opts = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
 
@@ -351,7 +539,9 @@ final class Settings_Page implements Admin_Settings_Page {
 	}
 
 	/**
-	 * @param array<string, mixed> $options
+	 * Clamps numeric settings to admin-defined min/max ranges.
+	 *
+	 * @param array<string, mixed> $options Partial or full settings row.
 	 * @return array<string, mixed>
 	 */
 	public static function clamp_numeric_settings(array $options): array {
@@ -372,12 +562,22 @@ final class Settings_Page implements Admin_Settings_Page {
 			self::CODE_RESEND_COOLDOWN_MIN,
 			min(self::CODE_RESEND_COOLDOWN_MAX, absint($options['code_resend_cooldown_seconds'] ?? $d['code_resend_cooldown_seconds']))
 		);
+		$options['code_step_ip_max_fails'] = max(
+			self::CODE_STEP_IP_MAX_FAILS_MIN,
+			min(self::CODE_STEP_IP_MAX_FAILS_MAX, absint($options['code_step_ip_max_fails'] ?? $d['code_step_ip_max_fails']))
+		);
+		$options['code_step_ip_lockout_seconds'] = max(
+			self::CODE_STEP_IP_LOCKOUT_MIN,
+			min(self::CODE_STEP_IP_LOCKOUT_MAX, absint($options['code_step_ip_lockout_seconds'] ?? $d['code_step_ip_lockout_seconds']))
+		);
 
 		return $options;
 	}
 
 	/**
-	 * @param array<string, mixed> $options
+	 * Normalises email-related strings, hex colours, and boolean-ish flags on the options row.
+	 *
+	 * @param array<string, mixed> $options Partial or full settings row.
 	 * @return array<string, mixed>
 	 */
 	public static function normalize_email_settings(array $options): array {
@@ -405,6 +605,11 @@ final class Settings_Page implements Admin_Settings_Page {
 			$options['debug_logging'] = $d['debug_logging'];
 		} else {
 			$options['debug_logging'] = (int) !empty($options['debug_logging']);
+		}
+		if (!isset($options['code_step_ip_rate_limit_enabled'])) {
+			$options['code_step_ip_rate_limit_enabled'] = $d['code_step_ip_rate_limit_enabled'];
+		} else {
+			$options['code_step_ip_rate_limit_enabled'] = (int) !empty($options['code_step_ip_rate_limit_enabled']);
 		}
 
 		return $options;

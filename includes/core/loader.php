@@ -8,6 +8,9 @@ if (!defined('ABSPATH')) {
 
 /**
  * Require a file under the plugin root if it exists (avoids fatals during refactors).
+ *
+ * @param string $relative Path relative to the plugin directory.
+ * @return void
  */
 function require_plugin_file(string $relative): void {
 	$path = Plugin::path($relative);

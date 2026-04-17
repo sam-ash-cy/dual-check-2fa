@@ -16,9 +16,10 @@ if (!defined('ABSPATH')) {
 final class Token_Store {
 
 	/**
-	 * Issue a login challenge.
-	 * @param int $user_id The ID of the user.
-	 * @param string $context The context of the challenge.
+	 * Creates a login challenge row and returns the plaintext code for emailing.
+	 *
+	 * @param int    $user_id WordPress user ID.
+	 * @param string $context Short context string stored on the row (e.g. `wp-login`).
 	 * @return array{plain: string, id: int}|false
 	 */
 	public static function issue_login_challenge(int $user_id, string $context = '') {
@@ -30,9 +31,10 @@ final class Token_Store {
 	}
 
 	/**
-	 * Consume a login token.
-	 * @param int $row_id The ID of the row to consume.
-	 * @return bool True if the row was consumed, false otherwise.
+	 * Marks a token row consumed so the same code cannot succeed twice.
+	 *
+	 * @param int $row_id Primary key in the dual_check table.
+	 * @return bool True if a row was updated; false if already consumed or missing.
 	 */
 	public static function consume_row(int $row_id): bool {
 		return mark_dual_check_token_consumed($row_id);

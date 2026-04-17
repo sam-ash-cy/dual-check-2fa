@@ -17,10 +17,10 @@ final class Code_Validator {
 	/**
 	 * Verifies the code for the issued challenge row only (no user-wide token scan).
 	 *
-	 * @param string $plain            Submitted code.
-	 * @param int    $user_id          Account id from the server-side session.
-	 * @param int    $challenge_row_id Token row id from {@see add_dual_check_token}.
-	 * @return array<string, mixed>|false
+	 * @param string $plain              Submitted code.
+	 * @param int    $user_id            Account id from the server-side session.
+	 * @param int    $challenge_row_id   Token row id from {@see add_dual_check_token}.
+	 * @return array<string, mixed>|false Token row on success; false otherwise.
 	 */
 	public static function verify_login_challenge(string $plain, int $user_id, int $challenge_row_id) {
 		if ($challenge_row_id <= 0 || $user_id <= 0) {

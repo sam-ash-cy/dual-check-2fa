@@ -34,6 +34,11 @@ final class Request_Context {
 		return $ip;
 	}
 
+	/**
+	 * Truncated HTTP User-Agent for storage and audit rows.
+	 *
+	 * @return string Empty if the header is missing or not a string.
+	 */
 	public static function user_agent(): string {
 		if (!isset($_SERVER['HTTP_USER_AGENT']) || !is_string($_SERVER['HTTP_USER_AGENT'])) {
 			return '';
