@@ -255,7 +255,7 @@ final class Settings_Page implements Admin_Settings_Page {
 			self::CODE_RESEND_COOLDOWN_MIN,
 			self::CODE_RESEND_COOLDOWN_MAX
 		);
-		echo '<p class="description">' . esc_html__('Applies per account and per IP when someone requests a login code. Reduces mail spam and guessing.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('Applies per account when that user requests a login code. Reduces mail spam and guessing.', 'wp-dual-check') . '</p>';
 	}
 
 	public function field_debug_logging(): void {

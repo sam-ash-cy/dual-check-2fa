@@ -25,8 +25,8 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	public function add_menu(): void {
 		add_submenu_page(
 			Settings_Page::MENU_SLUG,
-			__('Login email', 'wp-dual-check'),
-			__('Login email', 'wp-dual-check'),
+			__('Login Email Template', 'wp-dual-check'),
+			__('Login Email Template', 'wp-dual-check'),
 			'manage_options',
 			self::PAGE,
 			array($this, 'render_page')
@@ -109,7 +109,7 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'));
 		}
 
-		echo '<div class="wrap"><h1>' . esc_html__('Login email', 'wp-dual-check') . '</h1>';
+		echo '<div class="wrap"><h1>' . esc_html__('Login Email Template', 'wp-dual-check') . '</h1>';
 		$this->render_query_flash_notice();
 		Settings_Notices::render();
 		echo '<form action="options.php" method="post">';

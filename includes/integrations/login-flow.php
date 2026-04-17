@@ -7,7 +7,6 @@ use WP_DUAL_CHECK\admin\User_Profile_Settings;
 use WP_DUAL_CHECK\auth\Code_Request_Cooldown;
 use WP_DUAL_CHECK\auth\Code_Validator;
 use WP_DUAL_CHECK\auth\Token_Store;
-use WP_DUAL_CHECK\core\Request_Context;
 use WP_DUAL_CHECK\core\Security;
 use WP_DUAL_CHECK\email\Login_Email_Builder;
 use WP_DUAL_CHECK\Logging\Logger;
@@ -101,8 +100,7 @@ final class LoginFlow {
 			return $user;
 		}
 
-		$ip   = Request_Context::client_ip();
-		$wait = Code_Request_Cooldown::seconds_remaining($user_id, $ip);
+		$wait = Code_Request_Cooldown::seconds_remaining($user_id);
 		if ($wait > 0) {
 			Logger::debug(
 				'login_code_cooldown',
@@ -145,7 +143,7 @@ final class LoginFlow {
 			return $delivered;
 		}
 
-		Code_Request_Cooldown::mark_sent($user_id, $ip);
+		Code_Request_Cooldown::mark_sent($user_id);
 		Logger::debug('login_code_sent', array('user_id' => $user_id));
 
 		$session = self::new_session_token();
