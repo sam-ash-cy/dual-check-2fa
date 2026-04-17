@@ -39,6 +39,7 @@ class PluginLoad {
 		require_once WP_DUAL_CHECK_PATH . 'includes/logging/logger.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/two-factor-service.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-interface.php';
+		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-save-handler.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-step-rate-limit.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-request-cooldown.php';
@@ -57,6 +58,8 @@ class PluginLoad {
 	private function init_hooks(): void {
 
 		(new \WP_DUAL_CHECK\integrations\LoginFlow())->register();
+
+		(new \WP_DUAL_CHECK\admin\Settings_Save_Handler())->register();
 
 		if (is_admin()) {
 			(new \WP_DUAL_CHECK\admin\Settings_Page())->register();

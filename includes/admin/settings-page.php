@@ -523,8 +523,7 @@ final class Settings_Page implements Admin_Settings_Page {
 
 		echo '<div class="wrap"><h1>' . esc_html__('WP Dual Check', 'wp-dual-check') . '</h1>';
 		Settings_Notices::render();
-		echo '<form action="options.php" method="post">';
-		settings_fields('wp_dual_check_settings_group');
+		Settings_Save_Handler::render_form_open(self::MENU_SLUG);
 		printf('<input type="hidden" name="%s[save_context]" value="main" />', esc_attr(self::OPTION_NAME));
 		do_settings_sections(self::MENU_SLUG);
 		submit_button(__('Save changes', 'wp-dual-check'));

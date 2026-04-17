@@ -36,9 +36,16 @@ final class LoginFlow {
 
 	public const ACTION_CODE_PAGE = 'wp_dual_check';
 
+	/**
+	 * Legacy query key (still read if present so old links work once).
+	 * New logins use {@see COOKIE_PENDING} only — the token is not added to the URL.
+	 */
 	public const QUERY_SESSION = 'wpdc_session';
 
 	private const TRANSIENT_PREFIX = 'wpdc_sess_';
+
+	/** HttpOnly pending-login handle (48 hex chars), SameSite Strict. */
+	private const COOKIE_PENDING = 'wp_dual_check_pending';
 
 	/**
 	 * Hooks the post-password redirect and the dedicated code-entry login action.
@@ -70,7 +77,7 @@ final class LoginFlow {
 	/**
 	 * Transient key holding pending login state for a browser session token.
 	 *
-	 * @param string $session 48-character hex session id from the URL.
+	 * @param string $session 48-character hex session id.
 	 * @return string
 	 */
 	private static function transient_name(string $session): string {
@@ -87,17 +94,78 @@ final class LoginFlow {
 	}
 
 	/**
-	 * Reads and normalises the session query arg (strict hex length check).
+	 * Reads the pending-login token from the HttpOnly cookie (preferred) or legacy query arg.
 	 *
 	 * @return string 48-character lowercase hex, or empty string if missing/invalid.
 	 */
 	private static function parse_session_from_request(): string {
-		if (!isset($_REQUEST[self::QUERY_SESSION])) {
-			return '';
+		$candidates = array();
+		if (isset($_COOKIE[ self::COOKIE_PENDING ]) && is_string($_COOKIE[ self::COOKIE_PENDING ])) {
+			$candidates[] = $_COOKIE[ self::COOKIE_PENDING ];
 		}
-		$raw = preg_replace('/[^a-f0-9]/i', '', (string) wp_unslash($_REQUEST[self::QUERY_SESSION]));
+		if (isset($_REQUEST[ self::QUERY_SESSION ])) {
+			$candidates[] = (string) wp_unslash($_REQUEST[ self::QUERY_SESSION ]);
+		}
+		foreach ($candidates as $raw) {
+			$hex = preg_replace('/[^a-f0-9]/i', '', $raw);
+			if (strlen($hex) === 48) {
+				return strtolower($hex);
+			}
+		}
 
-		return strlen($raw) === 48 ? strtolower($raw) : '';
+		return '';
+	}
+
+	/**
+	 * Sets the pending-login cookie(s) on COOKIEPATH / SITECOOKIEPATH (same pattern as core test cookie).
+	 *
+	 * @param string $session 48-character lowercase hex.
+	 * @return void
+	 */
+	private static function set_pending_login_cookies(string $session): void {
+		$expires_at = time() + self::pending_session_ttl();
+		$secure     = is_ssl();
+		$domain     = (defined('COOKIE_DOMAIN') && COOKIE_DOMAIN) ? COOKIE_DOMAIN : '';
+		$base       = array(
+			'expires'  => $expires_at,
+			'domain'   => $domain,
+			'secure'   => $secure,
+			'httponly' => true,
+			'samesite' => 'Strict',
+		);
+
+		$base['path'] = COOKIEPATH;
+		setcookie(self::COOKIE_PENDING, $session, $base);
+
+		if (defined('SITECOOKIEPATH') && SITECOOKIEPATH && SITECOOKIEPATH !== COOKIEPATH) {
+			$base['path'] = SITECOOKIEPATH;
+			setcookie(self::COOKIE_PENDING, $session, $base);
+		}
+	}
+
+	/**
+	 * Clears pending-login cookies on all paths where they may have been set.
+	 *
+	 * @return void
+	 */
+	private static function clear_pending_login_cookies(): void {
+		$past       = time() - YEAR_IN_SECONDS;
+		$secure     = is_ssl();
+		$domain     = (defined('COOKIE_DOMAIN') && COOKIE_DOMAIN) ? COOKIE_DOMAIN : '';
+		$base       = array(
+			'expires'  => $past,
+			'domain'   => $domain,
+			'secure'   => $secure,
+			'httponly' => true,
+			'samesite' => 'Strict',
+		);
+		$base['path'] = COOKIEPATH;
+		setcookie(self::COOKIE_PENDING, ' ', $base);
+
+		if (defined('SITECOOKIEPATH') && SITECOOKIEPATH && SITECOOKIEPATH !== COOKIEPATH) {
+			$base['path'] = SITECOOKIEPATH;
+			setcookie(self::COOKIE_PENDING, ' ', $base);
+		}
 	}
 
 	/**
@@ -262,11 +330,12 @@ final class LoginFlow {
 			)
 		);
 
+		self::set_pending_login_cookies($session);
+
 		wp_safe_redirect(
 			add_query_arg(
 				array(
-					'action'        => self::ACTION_CODE_PAGE,
-					self::QUERY_SESSION => $session,
+					'action' => self::ACTION_CODE_PAGE,
 				),
 				wp_login_url()
 			)
@@ -285,12 +354,14 @@ final class LoginFlow {
 		}
 
 		if (!self::site_requires_second_factor()) {
+			self::clear_pending_login_cookies();
 			wp_safe_redirect(wp_login_url());
 			exit;
 		}
 
 		$session = self::parse_session_from_request();
 		if ($session === '') {
+			self::clear_pending_login_cookies();
 			wp_safe_redirect(wp_login_url());
 			exit;
 		}
@@ -447,6 +518,7 @@ final class LoginFlow {
 		Code_Step_Rate_Limit::clear_counters($user_id);
 
 		delete_transient(self::transient_name($session));
+		self::clear_pending_login_cookies();
 
 		$user = get_userdata($user_id);
 		if (!$user instanceof \WP_User) {
@@ -457,6 +529,7 @@ final class LoginFlow {
 					'reason'  => 'missing_user',
 				)
 			);
+			self::clear_pending_login_cookies();
 			wp_safe_redirect(wp_login_url());
 
 			exit;
@@ -487,7 +560,7 @@ final class LoginFlow {
 	/**
 	 * Outputs the HTML code form on wp-login.php and stops execution.
 	 *
-	 * @param string    $session Opaque session token (echoed in hidden field).
+	 * @param string    $session Server-side session id (cookie; not echoed in HTML).
 	 * @param \WP_Error $errors  Errors to show above the form.
 	 * @return void
 	 */
@@ -499,7 +572,6 @@ final class LoginFlow {
 		?>
 		<form name="wpdualcheck" id="wpdualcheck" action="<?php echo $form_action; ?>" method="post" autocomplete="off">
 			<input type="hidden" name="action" value="<?php echo esc_attr(self::ACTION_CODE_PAGE); ?>" />
-			<input type="hidden" name="<?php echo esc_attr(self::QUERY_SESSION); ?>" value="<?php echo esc_attr($session); ?>" />
 			<?php wp_nonce_field('wp_dual_check_submit', 'wp_dual_check_nonce'); ?>
 			<p>
 				<label for="<?php echo esc_attr(self::POST_CODE_KEY); ?>"><?php esc_html_e('Security code', 'wp-dual-check'); ?></label>
@@ -524,6 +596,7 @@ final class LoginFlow {
 	 * @return void
 	 */
 	private function render_code_page_expired(): void {
+		self::clear_pending_login_cookies();
 		$errors = new \WP_Error(
 			'dual_check_session',
 			__('This sign-in step is no longer valid. That usually means the wait was too long, the link was opened twice after you already signed in, or the address was changed. Log in again with your username and password.', 'wp-dual-check')

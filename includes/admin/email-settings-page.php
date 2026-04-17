@@ -169,8 +169,7 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		echo '<div class="wrap"><h1>' . esc_html__('Login Email Template', 'wp-dual-check') . '</h1>';
 		$this->render_query_flash_notice();
 		Settings_Notices::render();
-		echo '<form action="options.php" method="post">';
-		settings_fields('wp_dual_check_settings_group');
+		Settings_Save_Handler::render_form_open(self::PAGE);
 		printf('<input type="hidden" name="%s[save_context]" value="email" />', esc_attr(Settings_Page::OPTION_NAME));
 		do_settings_sections(self::PAGE);
 		submit_button(__('Save changes', 'wp-dual-check'));
