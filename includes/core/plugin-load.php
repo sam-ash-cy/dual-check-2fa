@@ -23,9 +23,11 @@ class PluginLoad {
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-generator.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-validator.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/token-store.php';
+		require_once WP_DUAL_CHECK_PATH . 'includes/logging/logger.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/two-factor-service.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-interface.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
+		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-request-cooldown.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/email-settings-page.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/user-profile-settings.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/email/login-email-builder.php';

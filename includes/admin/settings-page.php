@@ -24,6 +24,10 @@ final class Settings_Page implements Admin_Settings_Page {
 
 	public const CODE_LENGTH_MAX = 15;
 
+	public const CODE_RESEND_COOLDOWN_MIN = 30;
+
+	public const CODE_RESEND_COOLDOWN_MAX = 900;
+
 	public function register(): void {
 		add_action('admin_menu', array($this, 'add_main_menu'));
 		add_action('admin_init', array($this, 'register_settings'));
@@ -89,6 +93,29 @@ final class Settings_Page implements Admin_Settings_Page {
 			array($this, 'field_code_length'),
 			self::MENU_SLUG,
 			'wp_dual_check_main'
+		);
+
+		add_settings_section(
+			'wp_dual_check_limits',
+			__('Limits & debug', 'wp-dual-check'),
+			'',
+			self::MENU_SLUG
+		);
+
+		add_settings_field(
+			'code_resend_cooldown_seconds',
+			__('Minimum time between new login codes (seconds)', 'wp-dual-check'),
+			array($this, 'field_code_resend_cooldown'),
+			self::MENU_SLUG,
+			'wp_dual_check_limits'
+		);
+
+		add_settings_field(
+			'debug_logging',
+			__('Debug logging', 'wp-dual-check'),
+			array($this, 'field_debug_logging'),
+			self::MENU_SLUG,
+			'wp_dual_check_limits'
 		);
 
 		add_settings_field(
@@ -159,6 +186,16 @@ final class Settings_Page implements Admin_Settings_Page {
 		if (isset($input['code_length'])) {
 			$out['code_length'] = absint($input['code_length']);
 		}
+		if (isset($input['code_resend_cooldown_seconds'])) {
+			$out['code_resend_cooldown_seconds'] = absint($input['code_resend_cooldown_seconds']);
+		}
+		if (isset($input['debug_logging'])) {
+			$v = $input['debug_logging'];
+			if (is_array($v)) {
+				$v = end($v);
+			}
+			$out['debug_logging'] = !empty($v) ? 1 : 0;
+		}
 		if (isset($input['email_use_custom_template'])) {
 			$v = $input['email_use_custom_template'];
 			if (is_array($v)) {
@@ -208,6 +245,34 @@ final class Settings_Page implements Admin_Settings_Page {
 		);
 	}
 
+	public function field_code_resend_cooldown(): void {
+		$opts = self::clamp_numeric_settings(wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults()));
+		$v    = (int) $opts['code_resend_cooldown_seconds'];
+		printf(
+			'<input type="number" name="%1$s[code_resend_cooldown_seconds]" value="%2$d" min="%3$d" max="%4$d" class="small-text" />',
+			esc_attr(self::OPTION_NAME),
+			$v,
+			self::CODE_RESEND_COOLDOWN_MIN,
+			self::CODE_RESEND_COOLDOWN_MAX
+		);
+		echo '<p class="description">' . esc_html__('Applies per account and per IP when someone requests a login code. Reduces mail spam and guessing.', 'wp-dual-check') . '</p>';
+	}
+
+	public function field_debug_logging(): void {
+		$opts = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
+		$on   = !empty($opts['debug_logging']);
+		$n    = self::OPTION_NAME;
+		printf('<input type="hidden" name="%s[debug_logging]" value="0" />', esc_attr($n));
+		printf(
+			'<label for="wpdc_debug_logging"><input type="checkbox" id="wpdc_debug_logging" name="%1$s[debug_logging]" value="1" %2$s /> %3$s</label>',
+			esc_attr($n),
+			checked($on, true, false),
+			esc_html__('Write debug lines to the uploads log file', 'wp-dual-check')
+		);
+		$dir = \WP_DUAL_CHECK\Logging\Logger::log_directory();
+		echo '<p class="description">' . esc_html__('File:', 'wp-dual-check') . ' <code>' . esc_html($dir !== '' ? trailingslashit($dir) . 'debug.log' : '') . '</code></p>';
+	}
+
 	public function field_email_use_custom_template(): void {
 		$opts = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
 		$on   = !empty($opts['email_use_custom_template']);
@@ -250,6 +315,7 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 
 		echo '<div class="wrap"><h1>' . esc_html__('WP Dual Check', 'wp-dual-check') . '</h1>';
+		Settings_Notices::render();
 		echo '<form action="options.php" method="post">';
 		settings_fields('wp_dual_check_settings_group');
 		printf('<input type="hidden" name="%s[save_context]" value="main" />', esc_attr(self::OPTION_NAME));
@@ -273,6 +339,8 @@ final class Settings_Page implements Admin_Settings_Page {
 			'email_color_header_bg'      => '#2271b1',
 			'email_color_footer_bg'      => '#f0f0f1',
 			'email_use_custom_template'  => 0,
+			'code_resend_cooldown_seconds' => 30,
+			'debug_logging'              => 0,
 		);
 	}
 
@@ -299,6 +367,10 @@ final class Settings_Page implements Admin_Settings_Page {
 		$options['code_length'] = max(
 			self::CODE_LENGTH_MIN,
 			min(self::CODE_LENGTH_MAX, absint($options['code_length'] ?? $d['code_length']))
+		);
+		$options['code_resend_cooldown_seconds'] = max(
+			self::CODE_RESEND_COOLDOWN_MIN,
+			min(self::CODE_RESEND_COOLDOWN_MAX, absint($options['code_resend_cooldown_seconds'] ?? $d['code_resend_cooldown_seconds']))
 		);
 
 		return $options;
@@ -328,6 +400,11 @@ final class Settings_Page implements Admin_Settings_Page {
 			$options['email_use_custom_template'] = $d['email_use_custom_template'];
 		} else {
 			$options['email_use_custom_template'] = (int) !empty($options['email_use_custom_template']);
+		}
+		if (!isset($options['debug_logging'])) {
+			$options['debug_logging'] = $d['debug_logging'];
+		} else {
+			$options['debug_logging'] = (int) !empty($options['debug_logging']);
 		}
 
 		return $options;

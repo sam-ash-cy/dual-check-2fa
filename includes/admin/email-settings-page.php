@@ -2,7 +2,10 @@
 
 namespace WP_DUAL_CHECK\admin;
 
+use WP_DUAL_CHECK\email\Login_Email_Builder;
+use WP_DUAL_CHECK\Logging\Logger;
 use function WP_DUAL_CHECK\db\dual_check_settings;
+use function WP_DUAL_CHECK\delivery\get_default_mail_provider;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -16,15 +19,10 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		add_action('admin_menu', array($this, 'add_menu'), 11);
 		add_action('admin_init', array($this, 'register_fields'), 20);
 		add_action('admin_enqueue_scripts', array($this, 'enqueue_colors'));
+		add_action('admin_post_wp_dual_check_test_email', array($this, 'handle_test_email_post'));
 	}
 
 	public function add_menu(): void {
-
-        $show_settings = !empty(dual_check_settings()['email_use_custom_template']) && dual_check_settings()['email_use_custom_template'] == 1;
-        if (!$show_settings) {
-            return;
-        }
-
 		add_submenu_page(
 			Settings_Page::MENU_SLUG,
 			__('Login email', 'wp-dual-check'),
@@ -112,12 +110,66 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		}
 
 		echo '<div class="wrap"><h1>' . esc_html__('Login email', 'wp-dual-check') . '</h1>';
+		$this->render_query_flash_notice();
+		Settings_Notices::render();
 		echo '<form action="options.php" method="post">';
 		settings_fields('wp_dual_check_settings_group');
 		printf('<input type="hidden" name="%s[save_context]" value="email" />', esc_attr(Settings_Page::OPTION_NAME));
 		do_settings_sections(self::PAGE);
 		submit_button(__('Save changes', 'wp-dual-check'));
+		echo '</form>';
+
+		echo '<hr />';
+		echo '<h2>' . esc_html__('Send test email', 'wp-dual-check') . '</h2>';
+		echo '<p class="description">' . esc_html__('Sends a sample login-style message to your account email (placeholder code 000000).', 'wp-dual-check') . '</p>';
+		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
+		wp_nonce_field('wp_dual_check_test_email');
+		echo '<input type="hidden" name="action" value="wp_dual_check_test_email" />';
+		submit_button(__('Send test email', 'wp-dual-check'), 'secondary');
 		echo '</form></div>';
+	}
+
+	public function handle_test_email_post(): void {
+		if (!current_user_can('manage_options')) {
+			wp_die(esc_html__('You do not have permission to do this.', 'wp-dual-check'));
+		}
+		check_admin_referer('wp_dual_check_test_email');
+
+		$user = wp_get_current_user();
+		$to   = $user->user_email;
+		if ($to === '') {
+			wp_safe_redirect(add_query_arg(array('page' => self::PAGE, 'wpdc_msg' => 'no_email'), admin_url('admin.php')));
+			exit;
+		}
+
+		$mail    = Login_Email_Builder::build('000000', $user->user_login);
+		$headers = array('Content-Type: text/html; charset=UTF-8');
+		$sent    = get_default_mail_provider()->send($to, $mail['subject'], $mail['html'], $headers);
+		Logger::debug('test_email', array('to' => $to, 'sent' => (bool) $sent));
+
+		$arg = $sent ? 'test_ok' : 'test_fail';
+		wp_safe_redirect(add_query_arg(array('page' => self::PAGE, 'wpdc_msg' => $arg), admin_url('admin.php')));
+		exit;
+	}
+
+	private function render_query_flash_notice(): void {
+		if (!isset($_GET['wpdc_msg'])) {
+			return;
+		}
+		$key = sanitize_key((string) wp_unslash($_GET['wpdc_msg']));
+		if ($key === 'test_ok') {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Test email sent.', 'wp-dual-check') . '</p></div>';
+
+			return;
+		}
+		if ($key === 'test_fail') {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__('Could not send test email. Check your site mail configuration.', 'wp-dual-check') . '</p></div>';
+
+			return;
+		}
+		if ($key === 'no_email') {
+			echo '<div class="notice notice-warning is-dismissible"><p>' . esc_html__('Your user account has no email address.', 'wp-dual-check') . '</p></div>';
+		}
 	}
 
 	/**

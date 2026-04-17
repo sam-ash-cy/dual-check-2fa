@@ -212,6 +212,17 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 		)
 	);
 
+	if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
+		\WP_DUAL_CHECK\Logging\Logger::debug(
+			'token_issued',
+			array(
+				'row_id'  => $row_id,
+				'user_id' => (int) $user_id,
+				'context' => $context !== '' ? substr($context, 0, 64) : '',
+			)
+		);
+	}
+
 	return array(
 		'plain' => $plain,
 		'id'    => $row_id,
@@ -255,6 +266,10 @@ function verify_dual_check_token($user_id, $token_type, $plain_token) {
 
 	$candidates = $wpdb->get_results($query, ARRAY_A);
 	if (!is_array($candidates) || $candidates === array()) {
+		if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
+			\WP_DUAL_CHECK\Logging\Logger::debug('token_verify_no_row', array('user_id' => (int) $user_id));
+		}
+
 		return false;
 	}
 
@@ -278,6 +293,16 @@ function verify_dual_check_token($user_id, $token_type, $plain_token) {
 					'user_agent' => $v_ua,
 				)
 			);
+
+			if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
+				\WP_DUAL_CHECK\Logging\Logger::debug(
+					'token_verify_success',
+					array(
+						'row_id'  => $row_id,
+						'user_id' => (int) $user_id,
+					)
+				);
+			}
 
 			return $row;
 		}
@@ -304,6 +329,15 @@ function verify_dual_check_token($user_id, $token_type, $plain_token) {
 				'user_agent' => $v_ua,
 			)
 		);
+		if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
+			\WP_DUAL_CHECK\Logging\Logger::debug(
+				'token_verify_failed',
+				array(
+					'row_id'  => $challenge_id,
+					'user_id' => (int) $user_id,
+				)
+			);
+		}
 	}
 
 	return false;

@@ -4,10 +4,13 @@ namespace WP_DUAL_CHECK\integrations;
 
 use WP_DUAL_CHECK\admin\Settings_Page;
 use WP_DUAL_CHECK\admin\User_Profile_Settings;
+use WP_DUAL_CHECK\auth\Code_Request_Cooldown;
 use WP_DUAL_CHECK\auth\Code_Validator;
 use WP_DUAL_CHECK\auth\Token_Store;
+use WP_DUAL_CHECK\core\Request_Context;
 use WP_DUAL_CHECK\core\Security;
 use WP_DUAL_CHECK\email\Login_Email_Builder;
+use WP_DUAL_CHECK\Logging\Logger;
 use function WP_DUAL_CHECK\db\dual_check_settings;
 use function WP_DUAL_CHECK\delivery\get_default_mail_provider;
 
@@ -98,8 +101,31 @@ final class LoginFlow {
 			return $user;
 		}
 
+		$ip   = Request_Context::client_ip();
+		$wait = Code_Request_Cooldown::seconds_remaining($user_id, $ip);
+		if ($wait > 0) {
+			Logger::debug(
+				'login_code_cooldown',
+				array(
+					'user_id' => $user_id,
+					'wait'    => $wait,
+				)
+			);
+
+			return new \WP_Error(
+				'dual_check_cooldown',
+				sprintf(
+					/* translators: %d: seconds to wait */
+					__('Please wait %d seconds before requesting another login code.', 'wp-dual-check'),
+					$wait
+				)
+			);
+		}
+
 		$issued = Token_Store::issue_login_challenge($user_id, 'wp-login');
 		if ($issued === false) {
+			Logger::debug('login_code_issue_failed', array('user_id' => $user_id));
+
 			return new \WP_Error(
 				'dual_check_issue',
 				__('Could not create a login code. Please try again in a moment.', 'wp-dual-check')
@@ -108,8 +134,19 @@ final class LoginFlow {
 
 		$delivered = $this->deliver_login_challenge_email($user, $issued);
 		if (is_wp_error($delivered)) {
+			Logger::debug(
+				'login_code_mail_failed',
+				array(
+					'user_id' => $user_id,
+					'code'    => $delivered->get_error_code(),
+				)
+			);
+
 			return $delivered;
 		}
+
+		Code_Request_Cooldown::mark_sent($user_id, $ip);
+		Logger::debug('login_code_sent', array('user_id' => $user_id));
 
 		$session = self::new_session_token();
 		$remember = !empty($_POST['rememberme']);
@@ -182,6 +219,7 @@ final class LoginFlow {
 		$code     = Security::sanitise_code_from_request(self::POST_CODE_KEY);
 
 		if ($code === '') {
+			Logger::debug('login_code_verify_empty', array('user_id' => $user_id));
 			$errors = new \WP_Error('dual_check_empty', __('Please enter the code from your email.', 'wp-dual-check'));
 			$this->render_code_page($session, $errors);
 
@@ -190,6 +228,7 @@ final class LoginFlow {
 
 		$row = Code_Validator::verify_login($code, $user_id);
 		if ($row === false) {
+			Logger::debug('login_code_verify_failed', array('user_id' => $user_id));
 			$errors = new \WP_Error('dual_check_invalid', __('That code is wrong or expired. Try again.', 'wp-dual-check'));
 			$this->render_code_page($session, $errors);
 
@@ -197,11 +236,14 @@ final class LoginFlow {
 		}
 
 		if (!Token_Store::consume_row((int) $row['id'])) {
+			Logger::debug('login_code_consume_failed', array('user_id' => $user_id, 'row_id' => (int) $row['id']));
 			$errors = new \WP_Error('dual_check_consume', __('Could not finish login. Request a new code from the login page.', 'wp-dual-check'));
 			$this->render_code_page($session, $errors);
 
 			return;
 		}
+
+		Logger::debug('login_code_verify_ok', array('user_id' => $user_id, 'row_id' => (int) $row['id']));
 
 		delete_transient(self::transient_name($session));
 
