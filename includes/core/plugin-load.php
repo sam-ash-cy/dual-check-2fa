@@ -42,6 +42,7 @@ class PluginLoad {
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-step-rate-limit.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-request-cooldown.php';
+		require_once WP_DUAL_CHECK_PATH . 'includes/admin/permissions-settings-page.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/email-settings-page.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/user-profile-settings.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/email/login-email-builder.php';
@@ -59,6 +60,7 @@ class PluginLoad {
 
 		if (is_admin()) {
 			(new \WP_DUAL_CHECK\admin\Settings_Page())->register();
+			(new \WP_DUAL_CHECK\admin\Permissions_Settings_Page())->register();
 			(new \WP_DUAL_CHECK\admin\Email_Settings_Page())->register();
 			(new \WP_DUAL_CHECK\admin\User_Profile_Settings())->register();
 		}

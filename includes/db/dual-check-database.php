@@ -72,8 +72,9 @@ function dual_check_settings(): array {
 	);
 
 	$clamped = \WP_DUAL_CHECK\admin\Settings_Page::clamp_numeric_settings($merged);
+	$caps    = \WP_DUAL_CHECK\admin\Settings_Page::normalize_capability_arrays($clamped);
 
-	return \WP_DUAL_CHECK\admin\Settings_Page::normalize_email_settings($clamped);
+	return \WP_DUAL_CHECK\admin\Settings_Page::normalize_email_settings($caps);
 }
 
 /**

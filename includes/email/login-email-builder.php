@@ -11,6 +11,9 @@ if (!defined('ABSPATH')) {
 
 /**
  * Builds HTML login code emails from settings and placeholder tokens.
+ *
+ * When {@see use_custom_email_template()} is false, bundled defaults are used only; saved custom strings
+ * and saved colours are not applied to outbound mail.
  */
 final class Login_Email_Builder {
 
@@ -246,13 +249,19 @@ final class Login_Email_Builder {
 	 * @return string Full HTML document string.
 	 */
 	private static function build_html_wrapper(array $settings, string $inner_html, array $ctx): string {
-		$link   = isset($settings['email_color_link']) ? (string) $settings['email_color_link'] : '#2271b1';
-		$head_bg = isset($settings['email_color_header_bg']) ? (string) $settings['email_color_header_bg'] : '#2271b1';
-		$foot_bg = isset($settings['email_color_footer_bg']) ? (string) $settings['email_color_footer_bg'] : '#f0f0f1';
+		if (!self::use_custom_email_template($settings)) {
+			$link    = '#2271b1';
+			$head_bg = '#2271b1';
+			$foot_bg = '#f0f0f1';
+		} else {
+			$link    = isset($settings['email_color_link']) ? (string) $settings['email_color_link'] : '#2271b1';
+			$head_bg = isset($settings['email_color_header_bg']) ? (string) $settings['email_color_header_bg'] : '#2271b1';
+			$foot_bg = isset($settings['email_color_footer_bg']) ? (string) $settings['email_color_footer_bg'] : '#f0f0f1';
 
-		$link    = sanitize_hex_color($link) ?: '#2271b1';
-		$head_bg = sanitize_hex_color($head_bg) ?: '#2271b1';
-		$foot_bg = sanitize_hex_color($foot_bg) ?: '#f0f0f1';
+			$link    = sanitize_hex_color($link) ?: '#2271b1';
+			$head_bg = sanitize_hex_color($head_bg) ?: '#2271b1';
+			$foot_bg = sanitize_hex_color($foot_bg) ?: '#f0f0f1';
+		}
 
 		$html_vals = self::html_placeholder_values($ctx);
 

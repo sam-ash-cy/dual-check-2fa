@@ -50,9 +50,13 @@ final class Settings_Notices {
 	/**
 	 * Prints queued notices for this plugin’s group.
 	 *
+	 * Core’s “Settings saved.” after {@see options.php} is registered under the
+	 * {@see 'general'} group; this plugin’s custom notices use {@see self::GROUP}.
+	 *
 	 * @return void
 	 */
 	public static function render(): void {
+		settings_errors('general');
 		settings_errors(self::GROUP);
 	}
 }

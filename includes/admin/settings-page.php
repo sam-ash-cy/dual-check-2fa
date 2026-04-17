@@ -2,6 +2,8 @@
 
 namespace WP_DUAL_CHECK\admin;
 
+use WP_DUAL_CHECK\core\Security;
+
 if (!defined('ABSPATH')) {
 	exit;
 }
@@ -35,9 +37,9 @@ final class Settings_Page implements Admin_Settings_Page {
 
 	public const CODE_STEP_IP_MAX_FAILS_MAX = 30;
 
-	public const CODE_STEP_IP_LOCKOUT_MIN = 60;
+	public const CODE_STEP_IP_LOCKOUT_MIN = 30;
 
-	public const CODE_STEP_IP_LOCKOUT_MAX = 3600;
+	public const CODE_STEP_IP_LOCKOUT_MAX = 900;
 
 	/**
 	 * Hooks admin menu and Settings API registration.
@@ -58,7 +60,7 @@ final class Settings_Page implements Admin_Settings_Page {
 		add_menu_page(
 			__('WP Dual Check', 'wp-dual-check'),
 			__('WP Dual Check', 'wp-dual-check'),
-			'manage_options',
+			Security::menu_capability_for_main(),
 			self::MENU_SLUG,
 			array($this, 'render_page'),
 			'dashicons-lock',
@@ -68,7 +70,7 @@ final class Settings_Page implements Admin_Settings_Page {
 			self::MENU_SLUG,
 			__('General Settings', 'wp-dual-check'),
 			__('General Settings', 'wp-dual-check'),
-			'manage_options',
+			Security::menu_capability_for_main(),
 			self::MENU_SLUG,
 			array($this, 'render_page')
 		);
@@ -224,17 +226,46 @@ final class Settings_Page implements Admin_Settings_Page {
 		$prev = get_option(self::OPTION_NAME, array());
 		$out  = wp_parse_args(is_array($prev) ? $prev : array(), self::defaults());
 		if (!is_array($input)) {
-			return self::normalize_email_settings(self::clamp_numeric_settings($out));
+			return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 		}
 
 		// Email template screen posts the same option name but only a subset of keys; merge without wiping numerics.
 		$ctx = isset($input['save_context']) ? sanitize_key((string) $input['save_context']) : 'main';
 		unset($input['save_context']);
 
-		if ($ctx === 'email') {
-			$out = Email_Settings_Page::merge_from_post($input, $out);
+		if ($ctx === 'permissions') {
+			if (!Security::can_access_main_settings()) {
+				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+			}
+			$trial = Permissions_Settings_Page::merge_from_post($input, $out);
+			$trial = self::normalize_capability_arrays($trial);
+			if (!Security::current_user_passes_main_context_with_settings($trial)) {
+				Settings_Notices::error(
+					'wpdc_cap_lockout',
+					__('Those capability settings were not saved because your account would no longer match “Main settings & this screen”.', 'wp-dual-check')
+				);
+
+				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+			}
+			$out = $trial;
 
 			return self::normalize_email_settings(self::clamp_numeric_settings($out));
+		}
+
+		if ($ctx === 'email') {
+			if (!Security::can_access_email_template()) {
+				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+			}
+			if (empty($out['email_use_custom_template'])) {
+				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+			}
+			$out = Email_Settings_Page::merge_from_post($input, $out);
+
+			return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+		}
+
+		if (!Security::can_access_main_settings()) {
+			return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 		}
 
 		if (isset($input['code_lifetime_minutes'])) {
@@ -273,7 +304,7 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 		$out['code_step_ip_rate_limit_enabled'] = !empty($input['code_step_ip_rate_limit_enabled']) ? 1 : 0;
 
-		return self::normalize_email_settings(self::clamp_numeric_settings($out));
+		return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 	}
 
 	/**
@@ -444,6 +475,7 @@ final class Settings_Page implements Admin_Settings_Page {
 			checked($on, true, false),
 			esc_html__('Use custom email template', 'wp-dual-check')
 		);
+		echo '<p class="description" id="wpdc_use_custom_email_desc">' . esc_html__('When unchecked, login emails use only the bundled layout and colours; the Login Email Template screen is hidden and saved custom content is not applied.', 'wp-dual-check') . '</p>';
 	}
 
 	/**
@@ -485,7 +517,7 @@ final class Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function render_page(): void {
-		if (!current_user_can('manage_options')) {
+		if (!Security::can_access_main_settings()) {
 			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'));
 		}
 
@@ -523,8 +555,41 @@ final class Settings_Page implements Admin_Settings_Page {
 			'debug_logging'                => 0,
 			'code_step_ip_rate_limit_enabled' => 0,
 			'code_step_ip_max_fails'      => 5,
-			'code_step_ip_lockout_seconds' => 300,
+			'code_step_ip_lockout_seconds' => 30,
+			'cap_pool'                     => array('manage_options'),
+			'cap_context_main'             => array('manage_options'),
+			'cap_context_email'          => array('manage_options'),
 		);
+	}
+
+	/**
+	 * Intersects context caps with the pool and applies defaults when empty.
+	 *
+	 * @param array<string, mixed> $options Partial or full settings row.
+	 * @return array<string, mixed>
+	 */
+	public static function normalize_capability_arrays(array $options): array {
+		$d = self::defaults();
+		$pool = isset($options['cap_pool']) && is_array($options['cap_pool'])
+			? Security::normalize_cap_list($options['cap_pool'])
+			: Security::normalize_cap_list($d['cap_pool']);
+		if ($pool === array()) {
+			$pool = array('manage_options');
+		}
+		$options['cap_pool'] = $pool;
+
+		foreach (array('cap_context_main', 'cap_context_email') as $key) {
+			$ctx = isset($options[ $key ]) && is_array($options[ $key ])
+				? Security::normalize_cap_list($options[ $key ])
+				: array();
+			$ctx = array_values(array_intersect($ctx, $pool));
+			if ($ctx === array()) {
+				$ctx = array('manage_options');
+			}
+			$options[ $key ] = $ctx;
+		}
+
+		return $options;
 	}
 
 	/**

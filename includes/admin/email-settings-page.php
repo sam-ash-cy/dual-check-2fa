@@ -2,6 +2,7 @@
 
 namespace WP_DUAL_CHECK\admin;
 
+use WP_DUAL_CHECK\core\Security;
 use WP_DUAL_CHECK\email\Login_Email_Builder;
 use WP_DUAL_CHECK\Logging\Logger;
 use function WP_DUAL_CHECK\db\dual_check_settings;
@@ -36,20 +37,29 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function add_menu(): void {
-
-		$settings = dual_check_settings();
-
-		//if the user has enabled the email settings page, add the submenu page
-		if ($settings['email_use_custom_template']) {
-			add_submenu_page(
-				Settings_Page::MENU_SLUG,
-				__('Login Email Template', 'wp-dual-check'),
-				__('Login Email Template', 'wp-dual-check'),
-				'manage_options',
-				self::PAGE,
-				array($this, 'render_page')
-			);
+		if (!self::is_custom_template_enabled()) {
+			return;
 		}
+
+		add_submenu_page(
+			Settings_Page::MENU_SLUG,
+			__('Login Email Template', 'wp-dual-check'),
+			__('Login Email Template', 'wp-dual-check'),
+			Security::menu_capability_for_email(),
+			self::PAGE,
+			array($this, 'render_page')
+		);
+	}
+
+	/**
+	 * Whether “Use custom email template” is on (gates submenu, fields, saves, and outbound mail styling).
+	 *
+	 * @return bool
+	 */
+	public static function is_custom_template_enabled(): bool {
+		$s = dual_check_settings();
+
+		return !empty($s['email_use_custom_template']);
 	}
 
 	/**
@@ -58,6 +68,10 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function register_fields(): void {
+		if (!self::is_custom_template_enabled()) {
+			return;
+		}
+
 		add_settings_section(
 			'wpdc_email_body',
 			__('Content', 'wp-dual-check'),
@@ -122,6 +136,9 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function enqueue_colors(string $hook): void {
+		if (!self::is_custom_template_enabled()) {
+			return;
+		}
 		if ($hook !== Settings_Page::MENU_SLUG . '_page_' . self::PAGE) {
 			return;
 		}
@@ -140,8 +157,13 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function render_page(): void {
-		if (!current_user_can('manage_options')) {
+		if (!Security::can_access_email_template()) {
 			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'));
+		}
+
+		if (!self::is_custom_template_enabled()) {
+			wp_safe_redirect(add_query_arg('page', Settings_Page::MENU_SLUG, admin_url('admin.php')));
+			exit;
 		}
 
 		echo '<div class="wrap"><h1>' . esc_html__('Login Email Template', 'wp-dual-check') . '</h1>';
@@ -170,10 +192,15 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function handle_test_email_post(): void {
-		if (!current_user_can('manage_options')) {
+		if (!Security::can_access_email_template()) {
 			wp_die(esc_html__('You do not have permission to do this.', 'wp-dual-check'));
 		}
 		check_admin_referer('wp_dual_check_test_email');
+
+		if (!self::is_custom_template_enabled()) {
+			wp_safe_redirect(add_query_arg('page', Settings_Page::MENU_SLUG, admin_url('admin.php')));
+			exit;
+		}
 
 		$user = wp_get_current_user();
 		$to   = $user->user_email;
