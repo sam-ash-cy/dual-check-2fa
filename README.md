@@ -8,6 +8,35 @@
 - PHP 8.0 or newer.
 - Outbound email must work so users can receive verification codes.
 
+## Features
+
+### Login and second step
+
+- **Email code after password** on the normal `wp-login.php` flow: when the site requires it, a one-time code is sent after a correct username/password, then the user completes login on a **dedicated “security code” step** (no long session id in the URL; pending state uses an **HttpOnly** cookie with **SameSite Strict** where supported).
+- **Site-wide policy** to require the second step for **everyone** (off by default so you do not lock out users by surprise).
+- **Skips the email step** for REST API, XML‑RPC, and cron by default so automated flows keep working; fully **filterable** (`wp_dual_check_skip_second_factor`, `wp_dual_check_site_requires_second_factor`).
+- **Hashed codes** stored in the database (not plaintext), bound to a **specific challenge row**, **single-use** consumption, and **invalidation** of older unconsumed codes when a new one is issued.
+
+### Limits and abuse resistance
+
+- Configurable **code lifetime**, **code length**, and **maximum wrong attempts** per challenge before that code is exhausted.
+- **Resend cooldown** so users cannot spam new codes immediately.
+- Optional **IP-aware code-step lockout**: after repeated wrong codes for the same **IP + user** pair, the code step is temporarily blocked; **max failures** and **lockout duration** are configurable (can be tuned or disabled via filters).
+
+### Email and delivery
+
+- Login messages are **HTML email** with sensible defaults; optional **custom template** mode (subject, body, header/footer HTML, link/header/footer colours) with placeholders such as site name, code, user login, expiry text, and site URL (`[site-name]`, `[code]`, etc.).
+- **Send test email** from the admin screen (to the current user’s address) when custom templates are enabled.
+- **Pluggable mail delivery** via `wp_dual_check_mail_provider` (default uses WordPress `wp_mail`).
+
+### User and admin experience
+
+- Optional **profile field** for an **alternate email** used only for login codes (when the administrator enables “2FA delivery email on profile”).
+- **WP Dual Check** admin area: **General** settings, **Capabilities** (who may access main settings vs login email template), and **Login Email Template** (when custom email is enabled).
+- **Capability matrix** with **OR** semantics for runtime access; settings are saved through **`admin-post.php`** with explicit capability checks so delegated roles can persist changes without being blocked by core `options.php` behaviour alone.
+- **Self-lockout guard** when editing capabilities: changes that would remove your own access to “main” context are rejected with a notice.
+- Multisite **super admins** and users with the **Administrator** role may **bypass** the matrix for compatibility (also overridable with a filter).
+
 ## What it stores
 
 - **Database:** a custom table `{prefix}dual_check` for short-lived login tokens.

@@ -32,6 +32,7 @@ jobs:
             wp-dual-check.php\
             uninstall.php\
             LICENSE\
+            SECURITY.md
       
       - name: Upload archive artifact
         uses: actions/upload-artifact@v4
