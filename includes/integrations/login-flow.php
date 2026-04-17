@@ -100,12 +100,21 @@ final class LoginFlow {
 			return $user;
 		}
 
+		Logger::debug(
+			'twofa_triggered',
+			array(
+				'user_id'     => $user_id,
+				'user_login'  => $user->user_login,
+			)
+		);
+
 		$wait = Code_Request_Cooldown::seconds_remaining($user_id);
 		if ($wait > 0) {
 			Logger::debug(
-				'login_code_cooldown',
+				'twofa_failed',
 				array(
 					'user_id' => $user_id,
+					'reason'  => 'cooldown',
 					'wait'    => $wait,
 				)
 			);
@@ -122,7 +131,13 @@ final class LoginFlow {
 
 		$issued = Token_Store::issue_login_challenge($user_id, 'wp-login');
 		if ($issued === false) {
-			Logger::debug('login_code_issue_failed', array('user_id' => $user_id));
+			Logger::debug(
+				'twofa_failed',
+				array(
+					'user_id' => $user_id,
+					'reason'  => 'issue_token',
+				)
+			);
 
 			return new \WP_Error(
 				'dual_check_issue',
@@ -133,10 +148,11 @@ final class LoginFlow {
 		$delivered = $this->deliver_login_challenge_email($user, $issued);
 		if (is_wp_error($delivered)) {
 			Logger::debug(
-				'login_code_mail_failed',
+				'twofa_failed',
 				array(
-					'user_id' => $user_id,
-					'code'    => $delivered->get_error_code(),
+					'user_id'    => $user_id,
+					'reason'     => 'mail_send',
+					'error_code' => $delivered->get_error_code(),
 				)
 			);
 
@@ -144,7 +160,6 @@ final class LoginFlow {
 		}
 
 		Code_Request_Cooldown::mark_sent($user_id);
-		Logger::debug('login_code_sent', array('user_id' => $user_id));
 
 		$session = self::new_session_token();
 		$remember = !empty($_POST['rememberme']);
@@ -160,6 +175,14 @@ final class LoginFlow {
 				'redirect_to'  => $redirect_to,
 			),
 			self::pending_session_ttl()
+		);
+
+		Logger::debug(
+			'twofa_challenge_ready',
+			array(
+				'user_id'      => $user_id,
+				'challenge_id' => (int) $issued['id'],
+			)
 		);
 
 		wp_safe_redirect(
@@ -200,6 +223,12 @@ final class LoginFlow {
 			|| empty($pending['challenge_id'])
 			|| (int) $pending['challenge_id'] <= 0
 		) {
+			Logger::debug(
+				'twofa_failed',
+				array(
+					'reason' => 'session_invalid',
+				)
+			);
 			$this->render_code_page_expired();
 
 			return;
@@ -216,6 +245,13 @@ final class LoginFlow {
 
 	private function handle_code_page_post(string $session, array $pending): void {
 		if (!isset($_POST['wp_dual_check_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash((string) $_POST['wp_dual_check_nonce'])), 'wp_dual_check_submit')) {
+			Logger::debug(
+				'twofa_failed',
+				array(
+					'user_id' => isset($pending['user_id']) ? (int) $pending['user_id'] : 0,
+					'reason'  => 'invalid_nonce',
+				)
+			);
 			wp_die(esc_html__('Invalid request. Go back and try again.', 'wp-dual-check'), esc_html__('Security check failed', 'wp-dual-check'), 400);
 		}
 
@@ -224,7 +260,14 @@ final class LoginFlow {
 		$code         = Security::sanitise_code_from_request(self::POST_CODE_KEY);
 
 		if ($code === '') {
-			Logger::debug('login_code_verify_empty', array('user_id' => $user_id));
+			Logger::debug(
+				'twofa_failed',
+				array(
+					'user_id'      => $user_id,
+					'challenge_id' => $challenge_id,
+					'reason'       => 'empty_code',
+				)
+			);
 			$errors = new \WP_Error('dual_check_empty', __('Please enter the code from your email.', 'wp-dual-check'));
 			$this->render_code_page($session, $errors);
 
@@ -234,10 +277,11 @@ final class LoginFlow {
 		$row = Code_Validator::verify_login_challenge($code, $user_id, $challenge_id);
 		if ($row === false) {
 			Logger::debug(
-				'login_code_verify_failed',
+				'twofa_failed',
 				array(
 					'user_id'      => $user_id,
 					'challenge_id' => $challenge_id,
+					'reason'       => 'wrong_code',
 				)
 			);
 			$errors = new \WP_Error('dual_check_invalid', __('That code is wrong or expired. Try again.', 'wp-dual-check'));
@@ -247,19 +291,32 @@ final class LoginFlow {
 		}
 
 		if (!Token_Store::consume_row((int) $row['id'])) {
-			Logger::debug('login_code_consume_failed', array('user_id' => $user_id, 'row_id' => (int) $row['id']));
+			Logger::debug(
+				'twofa_failed',
+				array(
+					'user_id'      => $user_id,
+					'challenge_id' => $challenge_id,
+					'reason'       => 'consume_failed',
+					'row_id'       => (int) $row['id'],
+				)
+			);
 			$errors = new \WP_Error('dual_check_consume', __('Could not finish login. Request a new code from the login page.', 'wp-dual-check'));
 			$this->render_code_page($session, $errors);
 
 			return;
 		}
 
-		Logger::debug('login_code_verify_ok', array('user_id' => $user_id, 'row_id' => (int) $row['id']));
-
 		delete_transient(self::transient_name($session));
 
 		$user = get_userdata($user_id);
 		if (!$user instanceof \WP_User) {
+			Logger::debug(
+				'twofa_failed',
+				array(
+					'user_id' => $user_id,
+					'reason'  => 'missing_user',
+				)
+			);
 			wp_safe_redirect(wp_login_url());
 
 			exit;
@@ -269,6 +326,15 @@ final class LoginFlow {
 		wp_set_current_user($user_id);
 		wp_set_auth_cookie($user_id, !empty($pending['remember']));
 		do_action('wp_login', $user->user_login, $user);
+
+		Logger::debug(
+			'login_success',
+			array(
+				'user_id'    => $user_id,
+				'user_login' => $user->user_login,
+				'remember'   => !empty($pending['remember']),
+			)
+		);
 
 		$redirect_to = isset($pending['redirect_to']) ? (string) $pending['redirect_to'] : admin_url();
 		$redirect_to = wp_validate_redirect($redirect_to, admin_url());
