@@ -91,6 +91,14 @@ final class Settings_Page implements Admin_Settings_Page {
 			'wp_dual_check_main'
 		);
 
+		add_settings_field(
+			'email_use_custom_template',
+			__('Use custom email template', 'wp-dual-check'),
+			array($this, 'field_email_use_custom_template'),
+			self::MENU_SLUG,
+			'wp_dual_check_main'
+		);
+
 		add_settings_section(
 			'wp_dual_check_policy',
 			__('Login policy', 'wp-dual-check'),
@@ -138,13 +146,6 @@ final class Settings_Page implements Admin_Settings_Page {
 
 		if ($ctx === 'email') {
 			$out = Email_Settings_Page::merge_from_post($input, $out);
-			if (isset($input['email_use_custom_template'])) {
-				$v = $input['email_use_custom_template'];
-				if (is_array($v)) {
-					$v = end($v);
-				}
-				$out['email_use_custom_template'] = !empty($v) ? 1 : 0;
-			}
 
 			return self::normalize_email_settings(self::clamp_numeric_settings($out));
 		}
@@ -157,6 +158,13 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 		if (isset($input['code_length'])) {
 			$out['code_length'] = absint($input['code_length']);
+		}
+		if (isset($input['email_use_custom_template'])) {
+			$v = $input['email_use_custom_template'];
+			if (is_array($v)) {
+				$v = end($v);
+			}
+			$out['email_use_custom_template'] = !empty($v) ? 1 : 0;
 		}
 		$out['allow_profile_2fa_email'] = !empty($input['allow_profile_2fa_email']) ? 1 : 0;
 		$out['require_2fa_all_users']    = !empty($input['require_2fa_all_users']) ? 1 : 0;
@@ -198,6 +206,20 @@ final class Settings_Page implements Admin_Settings_Page {
 			self::CODE_LENGTH_MIN,
 			self::CODE_LENGTH_MAX
 		);
+	}
+
+	public function field_email_use_custom_template(): void {
+		$opts = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
+		$on   = !empty($opts['email_use_custom_template']);
+		$n    = self::OPTION_NAME;
+		printf('<input type="hidden" name="%s[email_use_custom_template]" value="0" />', esc_attr($n));
+		printf(
+			'<label for="wpdc_use_custom_email"><input type="checkbox" id="wpdc_use_custom_email" name="%1$s[email_use_custom_template]" value="1" %2$s aria-describedby="wpdc_use_custom_email_desc" /> %3$s</label>',
+			esc_attr($n),
+			checked($on, true, false),
+			esc_html__('Use custom email template (not the default file)', 'wp-dual-check')
+		);
+		echo '<p id="wpdc_use_custom_email_desc" class="description">' . esc_html__('Off: templates/email/default-template.php. On: subject, body, header, and footer from Login email.', 'wp-dual-check') . '</p>';
 	}
 
 	public function field_allow_profile_2fa_email(): void {

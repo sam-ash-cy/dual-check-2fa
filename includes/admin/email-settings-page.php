@@ -19,6 +19,12 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	}
 
 	public function add_menu(): void {
+
+        $show_settings = !empty(dual_check_settings()['email_use_custom_template']) && dual_check_settings()['email_use_custom_template'] == 1;
+        if (!$show_settings) {
+            return;
+        }
+
 		add_submenu_page(
 			Settings_Page::MENU_SLUG,
 			__('Login email', 'wp-dual-check'),
@@ -30,23 +36,6 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	}
 
 	public function register_fields(): void {
-		add_settings_section(
-			'wpdc_email_options',
-			__('Template', 'wp-dual-check'),
-			static function (): void {
-				echo '<p class="description">' . esc_html__('Turn on custom HTML to use the fields below instead of templates/email/default-template.php.', 'wp-dual-check') . '</p>';
-			},
-			self::PAGE
-		);
-
-		add_settings_field(
-			'email_use_custom_template',
-			__('Use custom HTML', 'wp-dual-check'),
-			array($this, 'field_use_custom'),
-			self::PAGE,
-			'wpdc_email_options'
-		);
-
 		add_settings_section(
 			'wpdc_email_body',
 			__('Content', 'wp-dual-check'),
@@ -136,18 +125,6 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @param array<string, mixed> $out  Merged option row to update.
 	 * @return array<string, mixed>
 	 */
-	public function field_use_custom(): void {
-		$on = !empty(dual_check_settings()['email_use_custom_template']);
-		$n  = Settings_Page::OPTION_NAME;
-		printf('<input type="hidden" name="%1$s[email_use_custom_template]" value="0" />', esc_attr($n));
-		printf(
-			'<label><input type="checkbox" name="%1$s[email_use_custom_template]" value="1" %2$s /> %3$s</label>',
-			esc_attr($n),
-			checked($on, true, false),
-			esc_html__('Send the subject and body from this screen (not the template files)', 'wp-dual-check')
-		);
-	}
-
 	public static function merge_from_post(array $post, array $out): array {
 		if (isset($post['email_subject_template'])) {
 			$out['email_subject_template'] = sanitize_textarea_field(wp_unslash((string) $post['email_subject_template']));
