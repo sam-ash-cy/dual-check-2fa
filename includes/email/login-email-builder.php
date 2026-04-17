@@ -24,12 +24,12 @@ final class Login_Email_Builder {
 		'[timezone]',
 	);
 
-	/** @var array<string, int> basename => 1 */
-	private const DEFAULT_TEMPLATE_FILES = array(
-		'default-subject.php' => 1,
-		'default-body.php'    => 1,
-		'default-header.php'  => 1,
-		'default-footer.php'  => 1,
+	/** @var array<string, string> */
+	private const DEFAULT_TEMPLATE_FN = array(
+		'subject' => 'wp_dual_check_email_default_subject',
+		'body'    => 'wp_dual_check_email_default_body',
+		'header'  => 'wp_dual_check_email_default_header',
+		'footer'  => 'wp_dual_check_email_default_footer',
 	);
 
 	/**
@@ -49,20 +49,26 @@ final class Login_Email_Builder {
 		return !empty($settings['email_use_custom_template']);
 	}
 
-	/**
-	 * Load a return-value PHP fragment from templates/email (custom template off).
-	 */
-	private static function load_default_template_file(string $basename): string {
-		if (!isset(self::DEFAULT_TEMPLATE_FILES[ $basename ])) {
+	/** Load templates/email/default-template.php once and call the part function. */
+	private static function default_template_part(string $part): string {
+		if (!isset(self::DEFAULT_TEMPLATE_FN[ $part ])) {
 			return '';
 		}
-		$path = Plugin::path('templates/email/' . $basename);
-		if (!is_readable($path)) {
+		static $loaded = false;
+		if (!$loaded) {
+			$loaded = true;
+			$path = Plugin::path('templates/email/default-template.php');
+			if (is_readable($path)) {
+				require_once $path;
+			}
+		}
+		$fn = self::DEFAULT_TEMPLATE_FN[ $part ];
+		if (!function_exists($fn)) {
 			return '';
 		}
-		$loaded = include $path;
+		$out = $fn();
 
-		return is_string($loaded) ? $loaded : '';
+		return is_string($out) ? trim($out) : '';
 	}
 
 	/**
@@ -71,7 +77,7 @@ final class Login_Email_Builder {
 	 */
 	private static function build_subject(array $settings, array $ctx): string {
 		if (!self::use_custom_email_template($settings)) {
-			$tpl = trim(self::load_default_template_file('default-subject.php'));
+			$tpl = self::default_template_part('subject');
 			if ($tpl === '') {
 				return sprintf(
 					/* translators: %s: site name */
@@ -110,7 +116,7 @@ final class Login_Email_Builder {
 	 */
 	private static function build_body_inner(array $settings, array $ctx): string {
 		if (!self::use_custom_email_template($settings)) {
-			$tpl = trim(self::load_default_template_file('default-body.php'));
+			$tpl = self::default_template_part('body');
 			if ($tpl === '') {
 				$tpl = self::default_body_template();
 			}
@@ -208,8 +214,8 @@ final class Login_Email_Builder {
 		$html_vals = self::html_placeholder_values($ctx);
 
 		if (!self::use_custom_email_template($settings)) {
-			$header_raw = trim(self::load_default_template_file('default-header.php'));
-			$footer_raw = trim(self::load_default_template_file('default-footer.php'));
+			$header_raw = self::default_template_part('header');
+			$footer_raw = self::default_template_part('footer');
 			$header_inner = $header_raw !== ''
 				? wp_kses_post(self::replace_tokens($header_raw, $html_vals))
 				: '<p style="margin:0;font-size:16px;font-weight:600;">' . esc_html__('Security code', 'wp-dual-check') . '</p>';

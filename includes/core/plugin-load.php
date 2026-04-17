@@ -24,7 +24,9 @@ class PluginLoad {
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-validator.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/token-store.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/two-factor-service.php';
+		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-interface.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
+		require_once WP_DUAL_CHECK_PATH . 'includes/admin/email-settings-page.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/user-profile-settings.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/email/login-email-builder.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/integrations/login-flow.php';
@@ -36,6 +38,7 @@ class PluginLoad {
 
 		if (is_admin()) {
 			(new \WP_DUAL_CHECK\admin\Settings_Page())->register();
+			(new \WP_DUAL_CHECK\admin\Email_Settings_Page())->register();
 			(new \WP_DUAL_CHECK\admin\User_Profile_Settings())->register();
 		}
 	}

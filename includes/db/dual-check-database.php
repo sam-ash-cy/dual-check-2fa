@@ -10,6 +10,7 @@ if (!defined('ABSPATH')) {
 }
 
 if (defined('WP_DUAL_CHECK_PATH')) {
+	require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-interface.php';
 	require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
 	require_once WP_DUAL_CHECK_PATH . 'includes/core/request-context.php';
 }
@@ -68,9 +69,9 @@ function dual_check_settings(): array {
 		\WP_DUAL_CHECK\admin\Settings_Page::defaults()
 	);
 
-	return \WP_DUAL_CHECK\admin\Settings_Page::normalize_email_settings(
-		\WP_DUAL_CHECK\admin\Settings_Page::clamp_numeric_settings($merged)
-	);
+	$clamped = \WP_DUAL_CHECK\admin\Settings_Page::clamp_numeric_settings($merged);
+
+	return \WP_DUAL_CHECK\admin\Settings_Page::normalize_email_settings($clamped);
 }
 
 $dual_check_database_install = static function (): void {
