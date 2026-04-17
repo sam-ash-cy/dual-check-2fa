@@ -217,9 +217,8 @@ final class Settings_Page implements Admin_Settings_Page {
 			'<label for="wpdc_use_custom_email"><input type="checkbox" id="wpdc_use_custom_email" name="%1$s[email_use_custom_template]" value="1" %2$s aria-describedby="wpdc_use_custom_email_desc" /> %3$s</label>',
 			esc_attr($n),
 			checked($on, true, false),
-			esc_html__('Use custom email template (not the default file)', 'wp-dual-check')
+			esc_html__('Use custom email template', 'wp-dual-check')
 		);
-		echo '<p id="wpdc_use_custom_email_desc" class="description">' . esc_html__('Off: templates/email/default-template.php. On: subject, body, header, and footer from Login email.', 'wp-dual-check') . '</p>';
 	}
 
 	public function field_allow_profile_2fa_email(): void {

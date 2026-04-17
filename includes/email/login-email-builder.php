@@ -20,8 +20,6 @@ final class Login_Email_Builder {
 		'[user-login]',
 		'[expires]',
 		'[site-url]',
-		'[minutes]',
-		'[timezone]',
 	);
 
 	/** @var array<string, string> */
@@ -182,14 +180,12 @@ final class Login_Email_Builder {
 			'[user-login]'  => $user_login,
 			'[expires]'     => $expires,
 			'[site-url]'    => home_url('/'),
-			'[minutes]'     => (string) $minutes,
-			'[timezone]'   => wp_timezone_string(),
 		);
 	}
 
 	private static function default_body_template(): string {
-		/* translators: Placeholders [expires] and [timezone] are replaced at send time; do not translate bracket tokens. */
-		$expiry_line = esc_html__('Valid until [expires] ([timezone]).', 'wp-dual-check');
+		/* translators: Placeholder [expires] is replaced at send time; do not translate bracket tokens. */
+		$expiry_line = esc_html__('Valid until [expires].', 'wp-dual-check');
 
 		return '<p>' . esc_html__('Your sign-in code is:', 'wp-dual-check') . '</p>'
 			. '<p style="font-size:24px;font-weight:700;letter-spacing:0.08em;margin:16px 0;">[code]</p>'

@@ -19,8 +19,8 @@ function wp_dual_check_email_default_subject(): string {
  * HTML body fragment (inner table cell).
  */
 function wp_dual_check_email_default_body(): string {
-	/* translators: Placeholders [expires] and [timezone] are replaced at send time. */
-	$expiry_line = esc_html__('Valid until [expires] ([timezone]).', 'wp-dual-check');
+	/* translators: Placeholder [expires] is replaced at send time. */
+	$expiry_line = esc_html__('Valid until [expires].', 'wp-dual-check');
 
 	return '<p>' . esc_html__('Your sign-in code is:', 'wp-dual-check') . '</p>'
 		. '<p style="font-size:24px;font-weight:700;letter-spacing:0.08em;margin:16px 0;">[code]</p>'

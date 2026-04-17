@@ -155,7 +155,7 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	}
 
 	public function section_intro(): void {
-		$list = '[site-name], [code], [user-login], [expires], [site-url], [minutes], [timezone]';
+		$list = '[site-name], [code], [user-login], [expires], [site-url]';
 		echo '<p>' . esc_html__('Placeholders in subject and body are replaced when mail is sent.', 'wp-dual-check') . '</p>';
 		echo '<p class="description"><code>' . esc_html($list) . '</code></p>';
 	}
@@ -167,7 +167,7 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 			esc_attr(Settings_Page::OPTION_NAME),
 			esc_textarea($v)
 		);
-		echo '<p class="description">' . esc_html__('Empty = default subject.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('If empty, the default subject will be used.', 'wp-dual-check') . '</p>';
 	}
 
 	public function field_body(): void {
@@ -177,7 +177,7 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 			esc_attr(Settings_Page::OPTION_NAME),
 			esc_textarea($v)
 		);
-		echo '<p class="description">' . esc_html__('Empty = default body.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('If empty, the default body will be used.', 'wp-dual-check') . '</p>';
 	}
 
 	public function field_header(): void {
