@@ -11,9 +11,10 @@ if (!defined('ABSPATH')) {
 
 if (defined('WP_DUAL_CHECK_PATH')) {
 	require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
+	require_once WP_DUAL_CHECK_PATH . 'includes/core/request-context.php';
 }
 
-const WP_DUAL_CHECK_DB_SCHEMA_VERSION = '1.0.0';
+const WP_DUAL_CHECK_DB_SCHEMA_VERSION = '1.1.0';
 
 /** Stored in dual_check.token_type for the wp-login second step. */
 const DUAL_CHECK_TOKEN_TYPE_LOGIN = 'login';
@@ -28,14 +29,47 @@ function get_table_name() {
 }
 
 /**
+ * Emits {@see 'wp_dual_check_security_event'} and optionally writes a line to the PHP error log when {@see WP_DEBUG_LOG} is enabled.
+ *
+ * @param array<string, mixed> $context
+ */
+function dual_check_log_security_event(string $event, array $context): void {
+	/**
+	 * Fires after a dual-check security-relevant action (token issued, verify success/failure).
+	 *
+	 * @param string               $event   Short event key (e.g. token_issued, token_verify_success).
+	 * @param array<string, mixed> $context Row id, user id, IP, truncated UA, etc.
+	 */
+	do_action('wp_dual_check_security_event', $event, $context);
+
+	$write = apply_filters('wp_dual_check_write_security_event_to_debug_log', null, $event, $context);
+	if ($write === null) {
+		$write = defined('WP_DEBUG') && WP_DEBUG && defined('WP_DEBUG_LOG') && WP_DEBUG_LOG;
+	}
+	if (!$write) {
+		return;
+	}
+
+	if (isset($context['user_agent']) && is_string($context['user_agent']) && strlen($context['user_agent']) > 160) {
+		$context['user_agent'] = substr($context['user_agent'], 0, 160) . '…';
+	}
+
+	error_log('[WP Dual Check] ' . $event . ' ' . wp_json_encode($context, JSON_UNESCAPED_SLASHES));
+}
+
+/**
  * Saved options from Settings → WP Dual Check (with defaults).
  *
- * @return array{code_lifetime_minutes: int, max_attempts: int, code_length: int, allow_profile_2fa_email?: int, require_2fa_all_users?: int}
+ * @return array<string, mixed>
  */
 function dual_check_settings(): array {
-	return wp_parse_args(
+	$merged = wp_parse_args(
 		get_option(\WP_DUAL_CHECK\admin\Settings_Page::OPTION_NAME, array()),
 		\WP_DUAL_CHECK\admin\Settings_Page::defaults()
+	);
+
+	return \WP_DUAL_CHECK\admin\Settings_Page::normalize_email_settings(
+		\WP_DUAL_CHECK\admin\Settings_Page::clamp_numeric_settings($merged)
 	);
 }
 
@@ -58,6 +92,8 @@ $dual_check_database_install = static function (): void {
 		created_at datetime NOT NULL,
 		ip_address varchar(45) DEFAULT NULL,
 		user_agent text,
+		verify_ip_address varchar(45) DEFAULT NULL,
+		verify_user_agent text,
 		context varchar(64) DEFAULT NULL,
 		PRIMARY KEY  (id),
 		KEY user_id (user_id),
@@ -114,7 +150,14 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 	$settings = dual_check_settings();
 	$length   = (int) $settings['code_length'];
 	// Letters + numbers only so HTML email and esc_html() never change what the user must type.
-	$plain = wp_generate_password(max(6, min(64, $length)), false, false);
+	$plain = wp_generate_password(
+		max(
+			\WP_DUAL_CHECK\admin\Settings_Page::CODE_LENGTH_MIN,
+			min(\WP_DUAL_CHECK\admin\Settings_Page::CODE_LENGTH_MAX, $length)
+		),
+		false,
+		false
+	);
 	$hash     = generate_token_hash($plain);
 	if ($hash === false) {
 		return false;
@@ -130,15 +173,20 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 
 	global $wpdb;
 
+	$ip = \WP_DUAL_CHECK\core\Request_Context::client_ip();
+	$ua = \WP_DUAL_CHECK\core\Request_Context::user_agent();
+
 	$table = $wpdb->prefix . 'dual_check';
 	$data  = array(
-		'user_id'    => (int) $user_id,
-		'token_hash' => $hash,
-		'token_type' => (string) $token_type,
-		'expires_at' => $expires_at,
-		'created_at' => current_time('mysql', true),
+		'user_id'     => (int) $user_id,
+		'token_hash'  => $hash,
+		'token_type'  => (string) $token_type,
+		'expires_at'  => $expires_at,
+		'created_at'  => current_time('mysql', true),
+		'ip_address'  => $ip,
+		'user_agent'  => $ua,
 	);
-	$formats = array('%d', '%s', '%s', '%s', '%s');
+	$formats = array('%d', '%s', '%s', '%s', '%s', '%s', '%s');
 
 	if ($context !== '') {
 		$data['context'] = substr($context, 0, 64);
@@ -147,14 +195,25 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 
 	$success = $wpdb->insert($table, $data, $formats);
 
-
 	if ($success === false) {
 		return false;
 	}
 
+	$row_id = (int) $wpdb->insert_id;
+	dual_check_log_security_event(
+		'token_issued',
+		array(
+			'row_id'     => $row_id,
+			'user_id'    => (int) $user_id,
+			'ip'         => $ip,
+			'user_agent' => $ua,
+			'context'    => $context !== '' ? substr($context, 0, 64) : '',
+		)
+	);
+
 	return array(
 		'plain' => $plain,
-		'id'    => (int) $wpdb->insert_id,
+		'id'    => $row_id,
 	);
 }
 
@@ -182,6 +241,8 @@ function verify_dual_check_token($user_id, $token_type, $plain_token) {
 	$now      = current_time('mysql', true);
 	$settings = dual_check_settings();
 	$max      = (int) $settings['max_attempts'];
+	$v_ip     = \WP_DUAL_CHECK\core\Request_Context::client_ip();
+	$v_ua     = \WP_DUAL_CHECK\core\Request_Context::user_agent();
 
 	$query = $wpdb->prepare(
 		"SELECT * FROM {$table} WHERE user_id = %d AND token_type = %s AND consumed_at IS NULL AND expires_at > %s AND attempts < %d ORDER BY id DESC",
@@ -198,6 +259,25 @@ function verify_dual_check_token($user_id, $token_type, $plain_token) {
 
 	foreach ($candidates as $row) {
 		if (!empty($row['token_hash']) && hash_equals((string) $row['token_hash'], $expected_hash)) {
+			$row_id = (int) $row['id'];
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET verify_ip_address = %s, verify_user_agent = %s WHERE id = %d",
+					$v_ip,
+					$v_ua,
+					$row_id
+				)
+			);
+			dual_check_log_security_event(
+				'token_verify_success',
+				array(
+					'row_id'     => $row_id,
+					'user_id'    => (int) $user_id,
+					'ip'         => $v_ip,
+					'user_agent' => $v_ua,
+				)
+			);
+
 			return $row;
 		}
 	}
@@ -207,9 +287,20 @@ function verify_dual_check_token($user_id, $token_type, $plain_token) {
 	if ($challenge_id > 0) {
 		$wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$table} SET attempts = attempts + 1 WHERE id = %d AND attempts < %d",
+				"UPDATE {$table} SET attempts = attempts + 1, verify_ip_address = %s, verify_user_agent = %s WHERE id = %d AND attempts < %d",
+				$v_ip,
+				$v_ua,
 				$challenge_id,
 				$max
+			)
+		);
+		dual_check_log_security_event(
+			'token_verify_failed',
+			array(
+				'row_id'     => $challenge_id,
+				'user_id'    => (int) $user_id,
+				'ip'         => $v_ip,
+				'user_agent' => $v_ua,
 			)
 		);
 	}

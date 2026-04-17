@@ -6,8 +6,8 @@ use WP_DUAL_CHECK\admin\Settings_Page;
 use WP_DUAL_CHECK\admin\User_Profile_Settings;
 use WP_DUAL_CHECK\auth\Code_Validator;
 use WP_DUAL_CHECK\auth\Token_Store;
-use WP_DUAL_CHECK\core\Plugin;
 use WP_DUAL_CHECK\core\Security;
+use WP_DUAL_CHECK\email\Login_Email_Builder;
 use function WP_DUAL_CHECK\db\dual_check_settings;
 use function WP_DUAL_CHECK\delivery\get_default_mail_provider;
 
@@ -64,7 +64,7 @@ final class LoginFlow {
 
 	private static function pending_session_ttl(): int {
 		$settings = dual_check_settings();
-		$minutes   = max(1, (int) $settings['code_lifetime_minutes']);
+		$minutes  = (int) $settings['code_lifetime_minutes'];
 
 		return $minutes * MINUTE_IN_SECONDS + MINUTE_IN_SECONDS;
 	}
@@ -272,9 +272,9 @@ final class LoginFlow {
 			);
 		}
 
-		$subject = $this->build_login_code_email_subject();
-		$body    = $this->build_login_code_email_body($issued['plain'], $user->user_login);
-		$sent    = get_default_mail_provider()->send($to, $subject, $body);
+		$mail    = Login_Email_Builder::build($issued['plain'], $user->user_login);
+		$headers = array('Content-Type: text/html; charset=UTF-8');
+		$sent    = get_default_mail_provider()->send($to, $mail['subject'], $mail['html'], $headers);
 
 		if (!$sent) {
 			return new \WP_Error(
@@ -286,36 +286,4 @@ final class LoginFlow {
 		return true;
 	}
 
-	private function build_login_code_email_subject(): string {
-		return sprintf(
-			/* translators: %s: site name */
-			__('[%s] Your login security code', 'wp-dual-check'),
-			wp_specialchars_decode(get_option('blogname'), ENT_QUOTES)
-		);
-	}
-
-	private function build_login_code_email_body(string $code, string $user_login): string {
-		$minutes       = max(1, (int) dual_check_settings()['code_lifetime_minutes']);
-		$expires_local = wp_date(
-			get_option('date_format') . ' ' . get_option('time_format'),
-			time() + $minutes * MINUTE_IN_SECONDS
-		);
-
-		$template = Plugin::path('templates/email/code.php');
-		if (!is_readable($template)) {
-			return esc_html(
-				sprintf(
-					/* translators: 1: code, 2: expiry in site timezone */
-					__('Your login code is: %1$s (valid until about %2$s, site time).', 'wp-dual-check'),
-					$code,
-					$expires_local
-				)
-			);
-		}
-
-		ob_start();
-		include $template;
-
-		return (string) ob_get_clean();
-	}
 }

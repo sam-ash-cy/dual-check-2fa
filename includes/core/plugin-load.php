@@ -26,6 +26,7 @@ class PluginLoad {
 		require_once WP_DUAL_CHECK_PATH . 'includes/auth/two-factor-service.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/admin/user-profile-settings.php';
+		require_once WP_DUAL_CHECK_PATH . 'includes/email/login-email-builder.php';
 		require_once WP_DUAL_CHECK_PATH . 'includes/integrations/login-flow.php';
 	}
 
