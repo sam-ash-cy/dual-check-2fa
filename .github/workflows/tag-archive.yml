@@ -1,0 +1,54 @@
+name: Create Archive for Tag
+
+on:
+  push:
+    tags:
+      - 'v[0-9]+.[0-9]+.[0-9]+*'              
+      - 'wp-dual-check-v[0-9]+.[0-9]+.[0-9]+*'    
+
+jobs:
+  create-archive:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Create archive
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          ARCHIVE_NAME="wp-dual-check-${TAG_NAME}.zip"
+          
+          # Create archive with specified directories and file
+          zip -r "${ARCHIVE_NAME}" \
+            includes/\
+            templates/\
+            wp-dual-check.php\
+            uninstall.php\
+            LICENSE\
+      
+      - name: Upload archive artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wp-dual-check-archive
+          path: wp-dual-check-*.zip
+          retention-days: 90
+
+      - name: Create release if it doesn't exist
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          if ! gh release view "$TAG_NAME"; then
+            gh release create "$TAG_NAME" --title="$TAG_NAME" --notes="Automated release for $TAG_NAME"
+          fi
+
+      - name: Attach archive to release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG_NAME=${GITHUB_REF#refs/tags/}
+          ARCHIVE_NAME="wp-dual-check-${TAG_NAME}.zip"
+          
+          echo "=== Attaching ${ARCHIVE_NAME} to release ${TAG_NAME} ==="
+          gh release upload "${TAG_NAME}" "${ARCHIVE_NAME}" --clobber

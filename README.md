@@ -1,6 +1,6 @@
 # WP Dual Check
 
-WordPress plugin that adds an email-based second step after a correct password on the standard login form. Site owners can require the step for everyone, tune code lifetime and limits, customize login email layout (optional), and restrict who may change settings via a capability matrix.
+**Open source** WordPress plugin (see [License](#license)). It adds an email-based second step after a correct password on the standard login form. Site owners can require the step for everyone, tune code lifetime and limits, customize login email layout (optional), and restrict who may change settings via a capability matrix.
 
 ## Requirements
 
@@ -39,6 +39,18 @@ It does **not** bulk-delete unrelated transients or other plugins’ data. Trans
 
 See [DEVELOPMENT.md](DEVELOPMENT.md) for layout, hooks, and how settings contexts (`main`, `email`, `permissions`) are sanitized.
 
+## Releases and tagging
+
+1. Bump **`Version:`** in `wp-dual-check.php` to match the release (e.g. `1.0.1`).
+2. Commit and push, then create an annotated tag, for example:
+   - `git tag -a v1.0.1 -m "Release v1.0.1"`
+   - `git push origin v1.0.1`
+3. The workflow [`.github/workflows/tag-archive.yml`](.github/workflows/tag-archive.yml) runs on tags like `v1.0.1` or `v1.0.0-beta.1`, builds `wp-dual-check-<tag>.zip` (with a top-level **`wp-dual-check/`** folder for WordPress uploads), and uploads it to a **GitHub Release** for that tag.
+
+**Do you need a GitHub token?** For this workflow, **no**. GitHub Actions provides **`GITHUB_TOKEN`** automatically for the run. The workflow sets `permissions: contents: write` so that token can create the release and attach the zip. You only need a **personal access token (PAT)** in repo secrets if you later add steps that talk to another repo, a private API, or need scopes the default token does not have.
+
+If the job fails with **403** on `gh release`, check **Settings → Actions → General → Workflow permissions** for this repository and allow **Read and write** (so `GITHUB_TOKEN` can publish releases).
+
 ## License
 
-GPLv2 or later.
+This project is **free / open source software** licensed under the **GNU General Public License v2.0 or later (GPLv2+)** — the same family of license used by WordPress. You may use, study, share, and modify it under those terms. See [LICENSE](LICENSE), the `License` and `License URI` headers in `wp-dual-check.php`, and the [GNU GPL v2](https://www.gnu.org/licenses/old-licenses/gpl-2.0.html) full text.
