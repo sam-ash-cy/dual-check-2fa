@@ -3,7 +3,7 @@
 namespace WP_DUAL_CHECK\auth;
 
 use const WP_DUAL_CHECK\db\DUAL_CHECK_TOKEN_TYPE_LOGIN;
-use function WP_DUAL_CHECK\db\verify_dual_check_token;
+use function WP_DUAL_CHECK\db\verify_dual_check_token_by_row;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -15,12 +15,18 @@ if (!defined('ABSPATH')) {
 final class Code_Validator {
 
 	/**
-	 * Verify the login code.
-	 * @param string $plain The plain text code from the user.
-	 * @param int $user_id The ID of the user.
-	 * @return array<string, mixed>|false Matching row from dual_check.
+	 * Verifies the code for the issued challenge row only (no user-wide token scan).
+	 *
+	 * @param string $plain            Submitted code.
+	 * @param int    $user_id          Account id from the server-side session.
+	 * @param int    $challenge_row_id Token row id from {@see add_dual_check_token}.
+	 * @return array<string, mixed>|false
 	 */
-	public static function verify_login(string $plain, int $user_id) {
-		return verify_dual_check_token($user_id, DUAL_CHECK_TOKEN_TYPE_LOGIN, $plain);
+	public static function verify_login_challenge(string $plain, int $user_id, int $challenge_row_id) {
+		if ($challenge_row_id <= 0 || $user_id <= 0) {
+			return false;
+		}
+
+		return verify_dual_check_token_by_row($challenge_row_id, $user_id, DUAL_CHECK_TOKEN_TYPE_LOGIN, $plain);
 	}
 }

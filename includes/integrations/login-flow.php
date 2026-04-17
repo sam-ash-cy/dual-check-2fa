@@ -154,9 +154,10 @@ final class LoginFlow {
 		set_transient(
 			self::transient_name($session),
 			array(
-				'user_id'     => $user_id,
-				'remember'    => $remember,
-				'redirect_to' => $redirect_to,
+				'user_id'      => $user_id,
+				'challenge_id' => (int) $issued['id'],
+				'remember'     => $remember,
+				'redirect_to'  => $redirect_to,
 			),
 			self::pending_session_ttl()
 		);
@@ -193,7 +194,12 @@ final class LoginFlow {
 		}
 
 		$pending = get_transient(self::transient_name($session));
-		if (!is_array($pending) || empty($pending['user_id'])) {
+		if (
+			!is_array($pending)
+			|| empty($pending['user_id'])
+			|| empty($pending['challenge_id'])
+			|| (int) $pending['challenge_id'] <= 0
+		) {
 			$this->render_code_page_expired();
 
 			return;
@@ -213,8 +219,9 @@ final class LoginFlow {
 			wp_die(esc_html__('Invalid request. Go back and try again.', 'wp-dual-check'), esc_html__('Security check failed', 'wp-dual-check'), 400);
 		}
 
-		$user_id = (int) $pending['user_id'];
-		$code     = Security::sanitise_code_from_request(self::POST_CODE_KEY);
+		$user_id      = (int) $pending['user_id'];
+		$challenge_id = isset($pending['challenge_id']) ? (int) $pending['challenge_id'] : 0;
+		$code         = Security::sanitise_code_from_request(self::POST_CODE_KEY);
 
 		if ($code === '') {
 			Logger::debug('login_code_verify_empty', array('user_id' => $user_id));
@@ -224,9 +231,15 @@ final class LoginFlow {
 			return;
 		}
 
-		$row = Code_Validator::verify_login($code, $user_id);
+		$row = Code_Validator::verify_login_challenge($code, $user_id, $challenge_id);
 		if ($row === false) {
-			Logger::debug('login_code_verify_failed', array('user_id' => $user_id));
+			Logger::debug(
+				'login_code_verify_failed',
+				array(
+					'user_id'      => $user_id,
+					'challenge_id' => $challenge_id,
+				)
+			);
 			$errors = new \WP_Error('dual_check_invalid', __('That code is wrong or expired. Try again.', 'wp-dual-check'));
 			$this->render_code_page($session, $errors);
 

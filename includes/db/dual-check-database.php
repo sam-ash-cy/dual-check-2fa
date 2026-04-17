@@ -148,6 +148,10 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 		return false;
 	}
 
+	if ((string) $token_type === DUAL_CHECK_TOKEN_TYPE_LOGIN) {
+		invalidate_prior_login_challenges((int) $user_id);
+	}
+
 	$settings = dual_check_settings();
 	$length   = (int) $settings['code_length'];
 	// Letters + numbers only so HTML email and esc_html() never change what the user must type.
@@ -230,15 +234,35 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 }
 
 /**
- * Checks the submitted code against a stored row (hash in DB, plain only from the user).
- *
- * @param int|string $user_id
- * @param string     $token_type
- * @param string     $plain_token Same kind of string add_dual_check_token emailed / showed once.
- * @return array<string, mixed>|false Matching row, or false.
+ * Marks any unconsumed login challenges for this user as used so only the newest issue stays valid.
  */
-function verify_dual_check_token($user_id, $token_type, $plain_token) {
-	if (empty($user_id) || $token_type === '' || $plain_token === '') {
+function invalidate_prior_login_challenges(int $user_id): void {
+	if ($user_id <= 0) {
+		return;
+	}
+
+	global $wpdb;
+
+	$table = get_table_name();
+	$now   = current_time('mysql', true);
+
+	$wpdb->query(
+		$wpdb->prepare(
+			"UPDATE {$table} SET consumed_at = %s WHERE user_id = %d AND token_type = %s AND consumed_at IS NULL",
+			$now,
+			$user_id,
+			DUAL_CHECK_TOKEN_TYPE_LOGIN
+		)
+	);
+}
+
+/**
+ * Verifies a code against one challenge row (by DB id). Ties verification to the issued challenge, not a broad user scan.
+ *
+ * @return array<string, mixed>|false
+ */
+function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string $token_type, string $plain_token) {
+	if ($challenge_id <= 0 || $user_id <= 0 || $token_type === '' || $plain_token === '') {
 		return false;
 	}
 
@@ -256,88 +280,91 @@ function verify_dual_check_token($user_id, $token_type, $plain_token) {
 	$v_ip     = \WP_DUAL_CHECK\core\Request_Context::client_ip();
 	$v_ua     = \WP_DUAL_CHECK\core\Request_Context::user_agent();
 
-	$query = $wpdb->prepare(
-		"SELECT * FROM {$table} WHERE user_id = %d AND token_type = %s AND consumed_at IS NULL AND expires_at > %s AND attempts < %d ORDER BY id DESC",
-		(int) $user_id,
-		$token_type,
-		$now,
-		$max
+	$row = $wpdb->get_row(
+		$wpdb->prepare(
+			"SELECT * FROM {$table} WHERE id = %d AND user_id = %d AND token_type = %s AND consumed_at IS NULL AND expires_at > %s AND attempts < %d",
+			$challenge_id,
+			$user_id,
+			$token_type,
+			$now,
+			$max
+		),
+		ARRAY_A
 	);
 
-	$candidates = $wpdb->get_results($query, ARRAY_A);
-	if (!is_array($candidates) || $candidates === array()) {
+	if (!is_array($row) || empty($row['id'])) {
 		if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
-			\WP_DUAL_CHECK\Logging\Logger::debug('token_verify_no_row', array('user_id' => (int) $user_id));
+			\WP_DUAL_CHECK\Logging\Logger::debug(
+				'token_verify_challenge_missing',
+				array(
+					'challenge_id' => $challenge_id,
+					'user_id'      => $user_id,
+				)
+			);
 		}
 
 		return false;
 	}
 
-	foreach ($candidates as $row) {
-		if (!empty($row['token_hash']) && hash_equals((string) $row['token_hash'], $expected_hash)) {
-			$row_id = (int) $row['id'];
-			$wpdb->query(
-				$wpdb->prepare(
-					"UPDATE {$table} SET verify_ip_address = %s, verify_user_agent = %s WHERE id = %d",
-					$v_ip,
-					$v_ua,
-					$row_id
-				)
-			);
-			dual_check_log_security_event(
-				'token_verify_success',
-				array(
-					'row_id'     => $row_id,
-					'user_id'    => (int) $user_id,
-					'ip'         => $v_ip,
-					'user_agent' => $v_ua,
-				)
-			);
-
-			if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
-				\WP_DUAL_CHECK\Logging\Logger::debug(
-					'token_verify_success',
-					array(
-						'row_id'  => $row_id,
-						'user_id' => (int) $user_id,
-					)
-				);
-			}
-
-			return $row;
-		}
-	}
-
-	// Wrong code: count one failed try against the newest active row only.
-	$challenge_id = (int) $candidates[0]['id'];
-	if ($challenge_id > 0) {
+	if (!empty($row['token_hash']) && hash_equals((string) $row['token_hash'], $expected_hash)) {
+		$row_id = (int) $row['id'];
 		$wpdb->query(
 			$wpdb->prepare(
-				"UPDATE {$table} SET attempts = attempts + 1, verify_ip_address = %s, verify_user_agent = %s WHERE id = %d AND attempts < %d",
+				"UPDATE {$table} SET verify_ip_address = %s, verify_user_agent = %s WHERE id = %d",
 				$v_ip,
 				$v_ua,
-				$challenge_id,
-				$max
+				$row_id
 			)
 		);
 		dual_check_log_security_event(
-			'token_verify_failed',
+			'token_verify_success',
 			array(
-				'row_id'     => $challenge_id,
+				'row_id'     => $row_id,
 				'user_id'    => (int) $user_id,
 				'ip'         => $v_ip,
 				'user_agent' => $v_ua,
 			)
 		);
+
 		if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
 			\WP_DUAL_CHECK\Logging\Logger::debug(
-				'token_verify_failed',
+				'token_verify_success',
 				array(
-					'row_id'  => $challenge_id,
+					'row_id'  => $row_id,
 					'user_id' => (int) $user_id,
 				)
 			);
 		}
+
+		return $row;
+	}
+
+	$wpdb->query(
+		$wpdb->prepare(
+			"UPDATE {$table} SET attempts = attempts + 1, verify_ip_address = %s, verify_user_agent = %s WHERE id = %d AND attempts < %d",
+			$v_ip,
+			$v_ua,
+			$challenge_id,
+			$max
+		)
+	);
+	dual_check_log_security_event(
+		'token_verify_failed',
+		array(
+			'row_id'     => $challenge_id,
+			'user_id'    => (int) $user_id,
+			'ip'         => $v_ip,
+			'user_agent' => $v_ua,
+		)
+	);
+	if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
+		\WP_DUAL_CHECK\Logging\Logger::debug(
+			'token_verify_failed',
+			array(
+				'row_id'  => $challenge_id,
+				'user_id' => (int) $user_id,
+			)
+		);
 	}
 
 	return false;
