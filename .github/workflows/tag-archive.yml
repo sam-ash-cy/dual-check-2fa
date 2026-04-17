@@ -4,11 +4,17 @@ on:
   push:
     tags:
       - 'v[0-9]+.[0-9]+.[0-9]+*'              
-      - 'wp-dual-check-v[0-9]+.[0-9]+.[0-9]+*'    
+      - 'wp-dual-check-v[0-9]+.[0-9]+.[0-9]+*'   
+
+permissions:
+  contents: write
 
 jobs:
   create-archive:
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: write
     
     steps:
       - name: Checkout code
