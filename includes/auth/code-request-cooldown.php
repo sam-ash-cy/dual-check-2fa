@@ -38,7 +38,7 @@ final class Code_Request_Cooldown {
 	 * @return int
 	 */
 	public static function seconds_remaining(int $user_id): int {
-		if ($user_id <= 0) {
+		if ($user_id <= 0 ) {
 			return 0;
 		}
 

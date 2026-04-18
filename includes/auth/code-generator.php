@@ -19,7 +19,7 @@ final class Code_Generator {
 	 * @return string
 	 */
 	public static function numeric_digits(int $length): string {
-		$length = max(4, min(12, $length));
+		$length = max(4, min(12, abs((int) $length)));
 		$digits  = '';
 		for ($i = 0; $i < $length; $i++) {
 			$digits .= (string) random_int(0, 9);

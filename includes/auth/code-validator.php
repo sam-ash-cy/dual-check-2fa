@@ -14,6 +14,9 @@ if (!defined('ABSPATH')) {
  */
 final class Code_Validator {
 
+	/** Reject absurd payloads before hashing (admin max code length is 32). */
+	private const PLAIN_MAX_LEN = 128;
+
 	/**
 	 * Verifies the code for the issued challenge row only (no user-wide token scan).
 	 *
@@ -24,6 +27,11 @@ final class Code_Validator {
 	 */
 	public static function verify_login_challenge(string $plain, int $user_id, int $challenge_row_id) {
 		if ($challenge_row_id <= 0 || $user_id <= 0) {
+			return false;
+		}
+
+		$plain = trim($plain);
+		if ($plain === '' || strlen($plain) > self::PLAIN_MAX_LEN) {
 			return false;
 		}
 

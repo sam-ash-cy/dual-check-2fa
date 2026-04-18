@@ -28,14 +28,14 @@ final class Settings_Save_Handler {
 	 */
 	public function handle(): void {
 		if (!is_user_logged_in()) {
-			wp_die(esc_html__('You must be logged in to save settings.', 'wp-dual-check'), '', 403);
+			wp_die(esc_html__('You must be logged in to save settings.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
 		}
 
 		check_admin_referer(self::ACTION, 'wp_dual_check_save_nonce');
 
 		$key = Settings_Page::OPTION_NAME;
 		if (!isset($_POST[ $key ]) || !is_array($_POST[ $key ])) {
-			wp_die(esc_html__('Invalid form submission.', 'wp-dual-check'), '', 400);
+			wp_die(esc_html__('Invalid form submission.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 400));
 		}
 
 		$input = wp_unslash($_POST[ $key ]);
@@ -43,19 +43,20 @@ final class Settings_Save_Handler {
 
 		if ($ctx === 'email') {
 			if (!Security::can_access_email_template() || !Email_Settings_Page::is_custom_template_enabled()) {
-				wp_die(esc_html__('You do not have permission to save these settings.', 'wp-dual-check'), '', 403);
+				wp_die(esc_html__('You do not have permission to save these settings.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
 			}
 		} elseif ($ctx === 'permissions') {
 			if (!Security::can_access_main_settings()) {
-				wp_die(esc_html__('You do not have permission to save these settings.', 'wp-dual-check'), '', 403);
+				wp_die(esc_html__('You do not have permission to save these settings.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
 			}
 		} else {
 			if (!Security::can_access_main_settings()) {
-				wp_die(esc_html__('You do not have permission to save these settings.', 'wp-dual-check'), '', 403);
+				wp_die(esc_html__('You do not have permission to save these settings.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
 			}
 		}
 
-		update_option($key, $input);
+		$sanitized = (new Settings_Page())->sanitize($input);
+		update_option($key, $sanitized);
 
 		if (!count(get_settings_errors())) {
 			add_settings_error(
