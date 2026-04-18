@@ -157,8 +157,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function render_page(): void {
+		if (!is_user_logged_in()) {
+			wp_die(esc_html__('You must be logged in.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
+		}
 		if (!Security::can_access_email_template()) {
-			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'));
+			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
 		}
 
 		if (!self::is_custom_template_enabled()) {
@@ -191,8 +194,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function handle_test_email_post(): void {
+		if (!is_user_logged_in()) {
+			wp_die(esc_html__('You must be logged in.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
+		}
 		if (!Security::can_access_email_template()) {
-			wp_die(esc_html__('You do not have permission to do this.', 'wp-dual-check'));
+			wp_die(esc_html__('You do not have permission to do this.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
 		}
 		check_admin_referer('wp_dual_check_test_email');
 

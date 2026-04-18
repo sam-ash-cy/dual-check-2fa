@@ -70,8 +70,7 @@ class User_Profile_Settings {
 		if (!($user instanceof \WP_User)) {
 			return;
 		}
-		$can_edit = (get_current_user_id() === (int) $user->ID) || current_user_can('edit_user', $user->ID);
-		if (!$can_edit) {
+		if (!is_user_logged_in() || !current_user_can('edit_user', $user->ID)) {
 			return;
 		}
 
@@ -100,6 +99,9 @@ class User_Profile_Settings {
 		if (!self::profile_field_enabled()) {
 			return;
 		}
+		if (!is_user_logged_in()) {
+			return;
+		}
 		$user_id = (int) $user_id;
 		if ($user_id <= 0) {
 			return;
@@ -107,7 +109,7 @@ class User_Profile_Settings {
 		if (!isset($_POST['_wpnonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash((string) $_POST['_wpnonce'])), 'update-user_' . $user_id)) {
 			return;
 		}
-		if (get_current_user_id() !== $user_id && !current_user_can('edit_user', $user_id)) {
+		if (!current_user_can('edit_user', $user_id)) {
 			return;
 		}
 		if (!isset($_POST['dual_check_2fa_email'])) {

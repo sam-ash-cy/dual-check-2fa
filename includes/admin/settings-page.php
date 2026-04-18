@@ -15,6 +15,9 @@ final class Settings_Page implements Admin_Settings_Page {
 
 	public const OPTION_NAME = 'wp_dual_check_settings';
 
+	/** Settings API group slug (used with {@see register_setting()} and options.php capability filter). */
+	public const OPTION_GROUP = 'wp_dual_check_settings_group';
+
 	public const MENU_SLUG = 'wp-dual-check';
 
 	public const CODE_LIFETIME_MIN = 5;
@@ -83,13 +86,43 @@ final class Settings_Page implements Admin_Settings_Page {
 	 */
 	public function register_settings(): void {
 		register_setting(
-			'wp_dual_check_settings_group',
+			self::OPTION_GROUP,
 			self::OPTION_NAME,
 			array(
 				'type'              => 'array',
 				'sanitize_callback' => array($this, 'sanitize'),
 				'default'           => self::defaults(),
 			)
+		);
+
+		/**
+		 * Core options.php only supports a single capability per option page. This plugin saves
+		 * through admin-post with OR-cap checks; require manage_options here so a stray
+		 * Settings API form cannot widen access beyond administrators.
+		 */
+		add_filter('option_page_capability_' . self::OPTION_GROUP, array(self::class, 'options_php_capability'));
+
+		add_settings_section(
+			'wp_dual_check_policy',
+			__('Login policy and management', 'wp-dual-check'),
+			'',
+			self::MENU_SLUG
+		);
+
+		add_settings_field(
+			'require_2fa_all_users',
+			__('Require dual-check for everyone', 'wp-dual-check'),
+			array($this, 'field_require_2fa_all_users'),
+			self::MENU_SLUG,
+			'wp_dual_check_policy'
+		);
+
+		add_settings_field(
+			'allow_profile_2fa_email',
+			__('2FA delivery email on profile', 'wp-dual-check'),
+			array($this, 'field_allow_profile_2fa_email'),
+			self::MENU_SLUG,
+			'wp_dual_check_policy'
 		);
 
 		add_settings_section(
@@ -123,27 +156,12 @@ final class Settings_Page implements Admin_Settings_Page {
 			'wp_dual_check_main'
 		);
 
-		add_settings_section(
-			'wp_dual_check_limits',
-			__('Limits & debug', 'wp-dual-check'),
-			'',
-			self::MENU_SLUG
-		);
-
 		add_settings_field(
 			'code_resend_cooldown_seconds',
 			__('Minimum time between new login codes (seconds)', 'wp-dual-check'),
 			array($this, 'field_code_resend_cooldown'),
 			self::MENU_SLUG,
-			'wp_dual_check_limits'
-		);
-
-		add_settings_field(
-			'debug_logging',
-			__('Debug logging', 'wp-dual-check'),
-			array($this, 'field_debug_logging'),
-			self::MENU_SLUG,
-			'wp_dual_check_limits'
+			'wp_dual_check_main'
 		);
 
 		add_settings_section(
@@ -185,35 +203,32 @@ final class Settings_Page implements Admin_Settings_Page {
 			'wp_dual_check_main'
 		);
 
+
 		add_settings_section(
-			'wp_dual_check_policy',
-			__('Login policy', 'wp-dual-check'),
+			'wp_dual_check_debugging',
+			__('Debugging', 'wp-dual-check'),
 			'',
 			self::MENU_SLUG
 		);
 
 		add_settings_field(
-			'require_2fa_all_users',
-			__('Require dual-check for everyone', 'wp-dual-check'),
-			array($this, 'field_require_2fa_all_users'),
+			'debug_logging',
+			__('Debug logging', 'wp-dual-check'),
+			array($this, 'field_debug_logging'),
 			self::MENU_SLUG,
-			'wp_dual_check_policy'
+			'wp_dual_check_debugging'
 		);
+	}
 
-		add_settings_section(
-			'wp_dual_check_profiles',
-			__('User profiles', 'wp-dual-check'),
-			'',
-			self::MENU_SLUG
-		);
-
-		add_settings_field(
-			'allow_profile_2fa_email',
-			__('2FA delivery email on profile', 'wp-dual-check'),
-			array($this, 'field_allow_profile_2fa_email'),
-			self::MENU_SLUG,
-			'wp_dual_check_profiles'
-		);
+	/**
+	 * Single capability for options.php (core does not support OR). Keeps accidental Settings API
+	 * posts on manage_options; delegated saves use admin-post with {@see Security::can_access_*()}.
+	 *
+	 * @param string $cap Default capability passed by core.
+	 * @return string
+	 */
+	public static function options_php_capability(string $cap): string {
+		return 'manage_options';
 	}
 
 	/**
@@ -506,9 +521,9 @@ final class Settings_Page implements Admin_Settings_Page {
 			'<label><input type="checkbox" name="%1$s[require_2fa_all_users]" value="1" %2$s /> %3$s</label>',
 			esc_attr(self::OPTION_NAME),
 			checked($checked, true, false),
-			esc_html__('Every user must complete the second step after password.', 'wp-dual-check')
+			esc_html__('Enable Two Factor Authentication for all users.', 'wp-dual-check')
 		);
-		echo '<p class="description">' . esc_html__('This is off by default to prevent locking out users.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('This is off by default to prevent locking out users. When enabled, all users will be required to complete a second step after logging in initially.', 'wp-dual-check') . '</p>';
 	}
 
 	/**
@@ -517,8 +532,11 @@ final class Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function render_page(): void {
+		if (!is_user_logged_in()) {
+			wp_die(esc_html__('You must be logged in.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
+		}
 		if (!Security::can_access_main_settings()) {
-			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'));
+			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
 		}
 
 		echo '<div class="wrap"><h1>' . esc_html__('WP Dual Check', 'wp-dual-check') . '</h1>';

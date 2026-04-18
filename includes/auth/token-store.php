@@ -15,6 +15,8 @@ if (!defined('ABSPATH')) {
  */
 final class Token_Store {
 
+	private const CONTEXT_MAX_LEN = 64;
+
 	/**
 	 * Creates a login challenge row and returns the plaintext code for emailing.
 	 *
@@ -23,6 +25,12 @@ final class Token_Store {
 	 * @return array{plain: string, id: int}|false
 	 */
 	public static function issue_login_challenge(int $user_id, string $context = '') {
+		if ($user_id <= 0) {
+			return false;
+		}
+
+		$context = substr($context, 0, self::CONTEXT_MAX_LEN);
+
 		return add_dual_check_token(
 			$user_id,
 			DUAL_CHECK_TOKEN_TYPE_LOGIN,
@@ -37,6 +45,10 @@ final class Token_Store {
 	 * @return bool True if a row was updated; false if already consumed or missing.
 	 */
 	public static function consume_row(int $row_id): bool {
+		if ($row_id <= 0) {
+			return false;
+		}
+
 		return mark_dual_check_token_consumed($row_id);
 	}
 }

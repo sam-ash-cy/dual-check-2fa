@@ -186,8 +186,11 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function render_page(): void {
+		if (!is_user_logged_in()) {
+			wp_die(esc_html__('You must be logged in.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
+		}
 		if (!Security::can_access_main_settings()) {
-			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'));
+			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
 		}
 
 		echo '<div class="wrap"><h1>' . esc_html__('WP Dual Check — Capabilities', 'wp-dual-check') . '</h1>';

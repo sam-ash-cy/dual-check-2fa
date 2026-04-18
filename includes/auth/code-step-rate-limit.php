@@ -73,6 +73,11 @@ final class Code_Step_Rate_Limit {
 
 		$until = (int) $until;
 		$now   = time();
+		if ($until <= 0) {
+			delete_transient(self::LOCK_PREFIX . $hk);
+
+			return 0;
+		}
 		if ($until <= $now) {
 			delete_transient(self::LOCK_PREFIX . $hk);
 
@@ -135,7 +140,8 @@ final class Code_Step_Rate_Limit {
 
 		$hk        = self::hash_bucket($user_id);
 		$count_key = self::COUNT_PREFIX . $hk;
-		$n         = (int) get_transient($count_key);
+		$raw_n     = get_transient($count_key);
+		$n         = is_numeric($raw_n) ? max(0, (int) $raw_n) : 0;
 		$n++;
 		set_transient($count_key, $n, $lockout + 120);
 

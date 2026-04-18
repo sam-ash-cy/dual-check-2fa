@@ -158,12 +158,18 @@ function generate_token_hash($value) {
  * @return array{plain: string, id: int}|false
  */
 function add_dual_check_token($user_id, $token_type, $context = '', $expires_at = null) {
-	if (empty($user_id) || empty($token_type)) {
+	$uid = absint($user_id);
+	if ($uid < 1) {
 		return false;
 	}
 
-	if ((string) $token_type === DUAL_CHECK_TOKEN_TYPE_LOGIN) {
-		invalidate_prior_login_challenges((int) $user_id);
+	$token_type = (string) $token_type;
+	if ($token_type === '') {
+		return false;
+	}
+
+	if ($token_type === DUAL_CHECK_TOKEN_TYPE_LOGIN) {
+		invalidate_prior_login_challenges($uid);
 	}
 
 	$settings = dual_check_settings();
@@ -183,7 +189,11 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 	}
 
 	if ($expires_at) {
-		$expires_at = date('Y-m-d H:i:s', strtotime((string) $expires_at));
+		$ts = strtotime((string) $expires_at);
+		if ($ts === false) {
+			return false;
+		}
+		$expires_at = date('Y-m-d H:i:s', $ts);
 	} else {
 		$minutes = (int) $settings['code_lifetime_minutes'];
 		// Store in GMT (same basis as current_time(..., true) in verify) so comparisons stay correct.
@@ -197,7 +207,7 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 
 	$table = $wpdb->prefix . 'dual_check';
 	$data  = array(
-		'user_id'     => (int) $user_id,
+		'user_id'     => $uid,
 		'token_hash'  => $hash,
 		'token_type'  => (string) $token_type,
 		'expires_at'  => $expires_at,
@@ -223,7 +233,7 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 		'token_issued',
 		array(
 			'row_id'     => $row_id,
-			'user_id'    => (int) $user_id,
+			'user_id'    => $uid,
 			'ip'         => $ip,
 			'user_agent' => $ua,
 			'context'    => $context !== '' ? substr($context, 0, 64) : '',
@@ -235,7 +245,7 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 			'token_issued',
 			array(
 				'row_id'  => $row_id,
-				'user_id' => (int) $user_id,
+				'user_id' => $uid,
 				'context' => $context !== '' ? substr($context, 0, 64) : '',
 			)
 		);
@@ -285,7 +295,13 @@ function invalidate_prior_login_challenges(int $user_id): void {
  * @return array<string, mixed>|false Full row on success; false if missing, expired, exhausted, or wrong code.
  */
 function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string $token_type, string $plain_token) {
+	$plain_token = trim($plain_token);
 	if ($challenge_id <= 0 || $user_id <= 0 || $token_type === '' || $plain_token === '') {
+		return false;
+	}
+
+	// Same upper bound as {@see \WP_DUAL_CHECK\auth\Code_Validator} (defense in depth).
+	if (strlen($plain_token) > 128) {
 		return false;
 	}
 
