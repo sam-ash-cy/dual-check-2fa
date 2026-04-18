@@ -26,8 +26,9 @@
 ### Email and delivery
 
 - Login messages are **HTML email** with sensible defaults; optional **custom template** mode (subject, body, header/footer HTML, link/header/footer colours) with placeholders such as site name, code, user login, expiry text, and site URL (`[site-name]`, `[code]`, etc.).
-- **Send test email** from the admin screen (to the current user’s address) when custom templates are enabled.
-- **Pluggable mail delivery** via `wp_dual_check_mail_provider` (default uses WordPress `wp_mail`).
+- **Send test email** from the admin screen (to the current user’s address) when custom templates are enabled — it uses the **same mail provider** as live login codes, so it is the quickest way to verify SendGrid, Postmark, Mailgun, or `wp_mail` after you change **General → Mail delivery for security codes**.
+- **Mail provider choice (General settings):** leave “Use a selectable mail provider…” **unchecked** to always send through WordPress **`wp_mail()`** (including any SMTP plugin). When **checked**, pick **WordPress wp_mail()** in the list or a **transactional HTTP** provider (**SendGrid**, **Postmark**, **Mailgun**). Save after enabling the checkbox so the provider dropdown and credential fields appear; change provider and save again if needed. API keys can live in the database or in **`wp-config.php`** constants (see [DEVELOPMENT.md](DEVELOPMENT.md) for names and option keys).
+- **Pluggable overrides:** `wp_dual_check_registered_mail_providers` extends the dropdown; `wp_dual_check_mail_provider` replaces the resolved `Mail_Provider_Interface` instance (runs last).
 
 ### User and admin experience
 
@@ -66,7 +67,7 @@ It does **not** bulk-delete unrelated transients or other plugins’ data. Trans
 
 ## Development
 
-See [DEVELOPMENT.md](DEVELOPMENT.md) for layout, hooks, and how settings contexts (`main`, `email`, `permissions`) are sanitized.
+See [DEVELOPMENT.md](DEVELOPMENT.md) for layout, hooks, mail provider resolution, `wp-config` secret constants, and how settings contexts (`main`, `email`, `permissions`) are sanitized.
 
 ## License
 

@@ -3,6 +3,9 @@
 namespace WP_DUAL_CHECK\admin;
 
 use WP_DUAL_CHECK\core\Security;
+use WP_DUAL_CHECK\delivery\Mail_Credentials;
+use function WP_DUAL_CHECK\delivery\get_registered_mail_providers;
+use function WP_DUAL_CHECK\delivery\normalize_mail_provider_id;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -130,6 +133,14 @@ final class Settings_Page implements Admin_Settings_Page {
 			__('General', 'wp-dual-check'),
 			'',
 			self::MENU_SLUG
+		);
+
+		add_settings_field(
+			'mail_delivery',
+			__('Mail delivery for security codes', 'wp-dual-check'),
+			array($this, 'field_mail_delivery'),
+			self::MENU_SLUG,
+			'wp_dual_check_main'
 		);
 
 		add_settings_field(
@@ -319,7 +330,225 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 		$out['code_step_ip_rate_limit_enabled'] = !empty($input['code_step_ip_rate_limit_enabled']) ? 1 : 0;
 
+		$out['mail_custom_provider_enabled'] = !empty($input['mail_custom_provider_enabled']) ? 1 : 0;
+		$mid_raw                             = isset($input['mail_provider_id']) ? (string) $input['mail_provider_id'] : (string) ($out['mail_provider_id'] ?? 'wp_mail');
+		$out['mail_provider_id']             = normalize_mail_provider_id($mid_raw);
+		$out                                 = self::merge_mail_provider_secret($out, $input, Mail_Credentials::SENDGRID_KEY_OPTION);
+		$out                                 = self::merge_mail_provider_secret($out, $input, Mail_Credentials::POSTMARK_TOKEN_OPTION);
+		$out                                 = self::merge_mail_provider_secret($out, $input, Mail_Credentials::MAILGUN_KEY_OPTION);
+		if (array_key_exists('mail_mailgun_domain', $input) && is_string($input['mail_mailgun_domain'])) {
+			$d = strtolower(sanitize_text_field(trim(wp_unslash($input['mail_mailgun_domain']))));
+			$d = (string) preg_replace('#^https?://#', '', $d);
+			$out['mail_mailgun_domain'] = trim($d, '/');
+		}
+		$reg = isset($input['mail_mailgun_region']) ? sanitize_key((string) $input['mail_mailgun_region']) : '';
+		$out['mail_mailgun_region'] = $reg === 'eu' ? 'eu' : 'us';
+
 		return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+	}
+
+	/**
+	 * Keeps stored API tokens when the password field is left blank on save.
+	 *
+	 * @param array<string, mixed> $out   Merged option row.
+	 * @param array<string, mixed> $input Raw POST slice.
+	 * @param string               $key   Option key (e.g. mail_sendgrid_api_key).
+	 * @return array<string, mixed>
+	 */
+	private static function merge_mail_provider_secret(array $out, array $input, string $key): array {
+		if (!array_key_exists($key, $input)) {
+			return $out;
+		}
+		$raw = trim((string) wp_unslash($input[ $key ]));
+		if ($raw !== '') {
+			$out[ $key ] = $raw;
+		}
+
+		return $out;
+	}
+
+	/**
+	 * Mail provider toggle, dropdown, and API credential fields (General section).
+	 *
+	 * @return void
+	 */
+	public function field_mail_delivery(): void {
+		if (!Security::can_access_main_settings()) {
+			return;
+		}
+
+		$opts = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
+		$on   = !empty($opts['mail_custom_provider_enabled']);
+		$cur  = normalize_mail_provider_id(isset($opts['mail_provider_id']) ? (string) $opts['mail_provider_id'] : 'wp_mail');
+		$n    = self::OPTION_NAME;
+
+		echo '<input type="hidden" name="' . esc_attr($n) . '[mail_custom_provider_enabled]" value="0" />';
+		printf(
+			'<p><label><input type="checkbox" name="%1$s[mail_custom_provider_enabled]" value="1" %2$s /> %3$s</label></p>',
+			esc_attr($n),
+			checked($on, true, false),
+			esc_html__('Use a selectable mail provider for login security codes', 'wp-dual-check')
+		);
+		echo '<p class="description">' . esc_html__(
+			'When unchecked, WordPress wp_mail() is always used. When checked, choose a provider below and save. API keys may be set here or via wp-config constants (see each provider).',
+			'wp-dual-check'
+		) . '</p>';
+
+		if (!$on) {
+			return;
+		}
+
+		echo '<div class="wpdc-mail-provider-panel">';
+		echo '<p><label for="wpdc_mail_provider_id">' . esc_html__('Provider', 'wp-dual-check') . '</label><br />';
+		printf('<select id="wpdc_mail_provider_id" name="%s[mail_provider_id]">', esc_attr($n));
+		foreach (get_registered_mail_providers() as $row) {
+			if (!is_array($row) || empty($row['id']) || !is_string($row['id'])) {
+				continue;
+			}
+			$id    = sanitize_key($row['id']);
+			$label = isset($row['label']) && is_string($row['label']) ? $row['label'] : $id;
+			printf(
+				'<option value="%s" %s>%s</option>',
+				esc_attr($id),
+				selected($cur, $id, false),
+				esc_html($label)
+			);
+		}
+		echo '</select></p>';
+
+		if ($cur === 'wp_mail') {
+			echo '<p class="description">' . esc_html__(
+				'Uses your site\'s normal wp_mail() configuration (including any SMTP plugin).',
+				'wp-dual-check'
+			) . '</p>';
+		} elseif ($cur === 'sendgrid') {
+			$this->render_mail_provider_sendgrid_row($n);
+		} elseif ($cur === 'postmark') {
+			$this->render_mail_provider_postmark_row($n);
+		} elseif ($cur === 'mailgun') {
+			$this->render_mail_provider_mailgun_row($n, $opts);
+		} else {
+			echo '<p class="description">' . esc_html__(
+				'Extra options for this provider are not shown here; use the wp_dual_check_mail_provider filter to supply an implementation.',
+				'wp-dual-check'
+			) . '</p>';
+		}
+
+		echo '</div>';
+	}
+
+	/**
+	 * @param string $n Option array name.
+	 */
+	private function render_mail_provider_sendgrid_row(string $n): void {
+		$key_opt = Mail_Credentials::SENDGRID_KEY_OPTION;
+		$const   = Mail_Credentials::SENDGRID_KEY_CONSTANT;
+		echo '<div class="wpdc-mail-provider-sub">';
+		echo '<p><strong>' . esc_html__('SendGrid', 'wp-dual-check') . '</strong></p>';
+		if (Mail_Credentials::constant_is_set($const)) {
+			echo '<p class="description">' . esc_html__(
+				'API key is set in wp-config via WP_DUAL_CHECK_SENDGRID_API_KEY (not stored in the database).',
+				'wp-dual-check'
+			) . '</p>';
+		} else {
+			printf(
+				'<p><label for="wpdc_sg_key">%1$s</label><br /><input type="password" class="regular-text" id="wpdc_sg_key" name="%2$s[%3$s]" value="" autocomplete="new-password" placeholder="%4$s" /></p>',
+				esc_html__('API key', 'wp-dual-check'),
+				esc_attr($n),
+				esc_attr($key_opt),
+				esc_attr__('Leave blank to keep the current key', 'wp-dual-check')
+			);
+		}
+		echo '</div>';
+	}
+
+	/**
+	 * @param string               $n    Option array name.
+	 * @param array<string, mixed> $opts Current options.
+	 */
+	private function render_mail_provider_postmark_row(string $n): void {
+		$key_opt = Mail_Credentials::POSTMARK_TOKEN_OPTION;
+		$const   = Mail_Credentials::POSTMARK_TOKEN_CONSTANT;
+		echo '<div class="wpdc-mail-provider-sub">';
+		echo '<p><strong>' . esc_html__('Postmark', 'wp-dual-check') . '</strong></p>';
+		if (Mail_Credentials::constant_is_set($const)) {
+			echo '<p class="description">' . esc_html__(
+				'Server token is set in wp-config via WP_DUAL_CHECK_POSTMARK_SERVER_TOKEN.',
+				'wp-dual-check'
+			) . '</p>';
+		} else {
+			printf(
+				'<p><label for="wpdc_pm_key">%1$s</label><br /><input type="password" class="regular-text" id="wpdc_pm_key" name="%2$s[%3$s]" value="" autocomplete="new-password" placeholder="%4$s" /></p>',
+				esc_html__('Server token', 'wp-dual-check'),
+				esc_attr($n),
+				esc_attr($key_opt),
+				esc_attr__('Leave blank to keep the current token', 'wp-dual-check')
+			);
+		}
+		echo '</div>';
+	}
+
+	/**
+	 * @param string               $n    Option array name.
+	 * @param array<string, mixed> $opts Current options.
+	 */
+	private function render_mail_provider_mailgun_row(string $n, array $opts): void {
+		$key_opt  = Mail_Credentials::MAILGUN_KEY_OPTION;
+		$dom_opt  = Mail_Credentials::MAILGUN_DOMAIN_OPTION;
+		$k_const  = Mail_Credentials::MAILGUN_KEY_CONSTANT;
+		$d_const  = Mail_Credentials::MAILGUN_DOMAIN_CONSTANT;
+		$region   = isset($opts['mail_mailgun_region']) && sanitize_key((string) $opts['mail_mailgun_region']) === 'eu' ? 'eu' : 'us';
+		$domain_v = '';
+		if (!Mail_Credentials::constant_is_set($d_const) && isset($opts[ $dom_opt ]) && is_string($opts[ $dom_opt ])) {
+			$domain_v = esc_attr($opts[ $dom_opt ]);
+		}
+		echo '<div class="wpdc-mail-provider-sub">';
+		echo '<p><strong>' . esc_html__('Mailgun', 'wp-dual-check') . '</strong></p>';
+		if (Mail_Credentials::constant_is_set($d_const)) {
+			echo '<p class="description">' . esc_html__(
+				'Sending domain is set in wp-config via WP_DUAL_CHECK_MAILGUN_DOMAIN.',
+				'wp-dual-check'
+			) . '</p>';
+		} else {
+			printf(
+				'<p><label for="wpdc_mg_domain">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_mg_domain" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
+				esc_html__('Sending domain (e.g. mg.example.com)', 'wp-dual-check'),
+				esc_attr($n),
+				esc_attr($dom_opt),
+				$domain_v
+			);
+		}
+		if (Mail_Credentials::constant_is_set(Mail_Credentials::MAILGUN_REGION_CONSTANT)) {
+			echo '<p class="description">' . esc_html__(
+				'Region is set via WP_DUAL_CHECK_MAILGUN_REGION (us or eu).',
+				'wp-dual-check'
+			) . '</p>';
+		} else {
+			echo '<p><label for="wpdc_mg_region">' . esc_html__('API region', 'wp-dual-check') . '</label><br />';
+			printf(
+				'<select id="wpdc_mg_region" name="%1$s[mail_mailgun_region]"><option value="us" %2$s>%3$s</option><option value="eu" %4$s>%5$s</option></select></p>',
+				esc_attr($n),
+				selected($region, 'us', false),
+				esc_html__('United States (api.mailgun.net)', 'wp-dual-check'),
+				selected($region, 'eu', false),
+				esc_html__('Europe (api.eu.mailgun.net)', 'wp-dual-check')
+			);
+		}
+		if (Mail_Credentials::constant_is_set($k_const)) {
+			echo '<p class="description">' . esc_html__(
+				'Private API key is set in wp-config via WP_DUAL_CHECK_MAILGUN_API_KEY.',
+				'wp-dual-check'
+			) . '</p>';
+		} else {
+			printf(
+				'<p><label for="wpdc_mg_key">%1$s</label><br /><input type="password" class="regular-text" id="wpdc_mg_key" name="%2$s[%3$s]" value="" autocomplete="new-password" placeholder="%4$s" /></p>',
+				esc_html__('Private API key', 'wp-dual-check'),
+				esc_attr($n),
+				esc_attr($key_opt),
+				esc_attr__('Leave blank to keep the current key', 'wp-dual-check')
+			);
+		}
+		echo '</div>';
 	}
 
 	/**
@@ -576,6 +805,13 @@ final class Settings_Page implements Admin_Settings_Page {
 			'cap_pool'                     => array('manage_options'),
 			'cap_context_main'             => array('manage_options'),
 			'cap_context_email'          => array('manage_options'),
+			'mail_custom_provider_enabled' => 0,
+			'mail_provider_id'             => 'wp_mail',
+			Mail_Credentials::SENDGRID_KEY_OPTION   => '',
+			Mail_Credentials::POSTMARK_TOKEN_OPTION => '',
+			Mail_Credentials::MAILGUN_KEY_OPTION    => '',
+			Mail_Credentials::MAILGUN_DOMAIN_OPTION   => '',
+			'mail_mailgun_region'          => 'us',
 		);
 	}
 

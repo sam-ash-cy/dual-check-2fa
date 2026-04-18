@@ -25,7 +25,8 @@ if (!defined('ABSPATH')) {
  * Filters (see each call site):
  * - `wp_dual_check_site_requires_second_factor` — bool from saved option.
  * - `wp_dual_check_skip_second_factor` — skip email step (bool, \WP_User); core pre-sets REST/XML‑RPC/cron.
- * - `wp_dual_check_mail_provider` — in {@see \WP_DUAL_CHECK\delivery\get_default_mail_provider()}.
+ * - `wp_dual_check_mail_provider` — final override in {@see \WP_DUAL_CHECK\delivery\get_default_mail_provider()} (after saved provider).
+ * - `wp_dual_check_registered_mail_providers` — rows for the General settings dropdown; unknown ids still resolve via the mail_provider filter.
  * - `wp_dual_check_code_step_ip_binding_enabled` — in {@see \WP_DUAL_CHECK\auth\Code_Step_Rate_Limit::is_binding_enabled()}.
  * - `wp_dual_check_code_step_ip_max_fails`, `wp_dual_check_code_step_ip_lockout_seconds` — lockout tuning.
  * - `wp_dual_check_record_code_step_failure` — whether to count a failed verify toward IP lockout (bool, reason, user id).
