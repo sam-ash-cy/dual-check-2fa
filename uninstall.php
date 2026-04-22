@@ -29,8 +29,20 @@ function dual_check_2fa_uninstall_site_data(): void {
 	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name is built from trusted prefix.
 	$wpdb->query("DROP TABLE IF EXISTS `{$table}`");
 
+	$events = $wpdb->prefix . 'dual_check_events';
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$wpdb->query("DROP TABLE IF EXISTS `{$events}`");
+
+	$trusted = $wpdb->prefix . 'dual_check_trusted_devices';
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+	$wpdb->query("DROP TABLE IF EXISTS `{$trusted}`");
+
 	delete_option('dual_check_2fa_settings');
 	delete_option('dual_check_2fa_db_version');
+	delete_option('dual_check_2fa_events_db_version');
+	delete_option('dual_check_2fa_trusted_devices_db_version');
+
+	wp_clear_scheduled_hook('dual_check_2fa_token_gc');
 
 	if (function_exists('wp_upload_dir')) {
 		$upload = wp_upload_dir();
@@ -91,3 +103,4 @@ if (!is_multisite()) {
 
 // User meta is stored once per user (network-wide on multisite).
 delete_metadata('user', 0, 'dual_check_2fa_email', '', true);
+delete_metadata('user', 0, 'dual_check_2fa_exempt', '', true);

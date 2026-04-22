@@ -14,7 +14,7 @@
 
 - **Email code after password** on the normal `wp-login.php` flow: when the site requires it, a one-time code is sent after a correct username/password, then the user completes login on a **dedicated “security code” step** (no long session id in the URL; pending state uses an **HttpOnly** cookie with **SameSite Strict** where supported).
 - **Site-wide policy** to require the second step for **everyone** (off by default so you do not lock out users by surprise).
-- **Skips the email step** for REST API, XML‑RPC, and cron by default so automated flows keep working; fully **filterable** (`dual_check_2fa_skip_second_factor`, `dual_check_2fa_site_requires_second_factor`).
+- **Skips the email step** for REST API, XML‑RPC, and cron by default so automated flows keep working; fully **filterable** (`dual_check_2fa_skip_second_factor`, `dual_check_2fa_site_requires_second_factor`). Optional **per-user exemption** (admin-only profile checkbox) and **trusted devices** (“remember this browser” on the code step) when enabled.
 - **Hashed codes** stored in the database (not plaintext), bound to a **specific challenge row**, **single-use** consumption, and **invalidation** of older unconsumed codes when a new one is issued.
 
 ### Limits and abuse resistance
@@ -26,23 +26,23 @@
 ### Email and delivery
 
 - Login messages are **HTML email** with sensible defaults; optional **custom template** mode (subject, body, header/footer HTML, link/header/footer colours) with placeholders such as site name, code, user login, expiry text, and site URL (`[site-name]`, `[code]`, etc.).
-- **Send test email** from the admin screen (to the current user’s address) when custom templates are enabled — it uses the **same mail provider** as live login codes, so it is the quickest way to verify SendGrid, Postmark, Mailgun, or `wp_mail` after you change **General → Mail delivery for security codes**.
-- **Mail provider choice (General settings):** leave “Use a selectable mail provider…” **unchecked** to always send through WordPress **`wp_mail()`** (including any SMTP plugin). When **checked**, pick **WordPress wp_mail()** in the list or a **transactional HTTP** provider (**SendGrid**, **Postmark**, **Mailgun**). Save after enabling the checkbox so the provider dropdown and credential fields appear; change provider and save again if needed. API keys can live in the database or in **`wp-config.php`** constants (see [DEVELOPMENT.md](DEVELOPMENT.md) for names and option keys).
+- **Send test email** from **General → Debugging** (to the current user’s address) using the **same mail provider** as live login codes — works even when custom email templates are off. When custom templates are enabled, **Login Email Template** also offers a template-aware test send.
+- **Mail provider choice (General settings):** leave “Use a selectable mail provider…” **unchecked** to always send through WordPress **`wp_mail()`** (including any SMTP plugin). When **checked**, pick **WordPress wp_mail()** in the list or a **transactional HTTP** provider (**SendGrid**, **Postmark**, **Mailgun**, **Amazon SES**). Save after enabling the checkbox so the provider dropdown and credential fields appear; change provider and save again if needed. API keys can live in the database or in **`wp-config.php`** constants (see [DEVELOPMENT.md](DEVELOPMENT.md) for names and option keys).
 - **Pluggable overrides:** `dual_check_2fa_registered_mail_providers` extends the dropdown; `dual_check_2fa_mail_provider` replaces the resolved `Mail_Provider_Interface` instance (runs last).
 
 ### User and admin experience
 
 - Optional **profile field** for an **alternate email** used only for login codes (when the administrator enables “2FA delivery email on profile”).
-- **Dual Check 2FA** admin area: **General** settings, **Capabilities** (who may access main settings vs login email template), and **Login Email Template** (when custom email is enabled).
+- **Dual Check 2FA** admin area: **General** settings, **Capabilities** (who may access main settings vs login email template), **Login Activity** (audit table), and **Login Email Template** (when custom email is enabled).
 - **Capability matrix** with **OR** semantics for runtime access; settings are saved through **`admin-post.php`** with explicit capability checks so delegated roles can persist changes without being blocked by core `options.php` behaviour alone.
 - **Self-lockout guard** when editing capabilities: changes that would remove your own access to “main” context are rejected with a notice.
 - Multisite **super admins** and users with the **Administrator** role may **bypass** the matrix for compatibility (also overridable with a filter).
 
 ## What it stores
 
-- **Database:** a custom table `{prefix}dual_check` for short-lived login tokens.
-- **Options:** `dual_check_2fa_settings` (all plugin settings) and `dual_check_2fa_db_version` (schema marker).
-- **User meta:** `dual_check_2fa_email` when a user sets an alternate address for codes (profile field).
+- **Database:** `{prefix}dual_check` for short-lived login tokens; `{prefix}dual_check_events` for login activity (when enabled); `{prefix}dual_check_trusted_devices` for remembered browsers (when used).
+- **Options:** `dual_check_2fa_settings` (all plugin settings), `dual_check_2fa_db_version`, `dual_check_2fa_events_db_version`, and `dual_check_2fa_trusted_devices_db_version` (schema markers).
+- **User meta:** `dual_check_2fa_email` when a user sets an alternate address for codes (profile field); `dual_check_2fa_exempt` when an administrator marks a user exempt from 2FA (optional feature).
 - **Transients:** session and rate-limit keys prefixed with `dc2fa_` (they expire on their own; uninstall does not scan the options table for them).
 - **Uploads (optional):** if “Debug logging” is enabled, JSON lines may be written under `wp-content/uploads/dual-check-2fa/logs/debug.log`.
 
@@ -58,9 +58,10 @@ Multisite super admins, users with the **administrator** role, and anything that
 
 Deleting the plugin from **Plugins → Delete** runs `uninstall.php`, which:
 
-- Drops the `{prefix}dual_check` table on each site (multisite: every blog in `wp_blogs`).
-- Deletes `dual_check_2fa_settings` and `dual_check_2fa_db_version` per site.
-- Removes all `dual_check_2fa_email` user meta network-wide.
+- Drops the `{prefix}dual_check`, `{prefix}dual_check_events`, and `{prefix}dual_check_trusted_devices` tables on each site (multisite: every blog in `wp_blogs`).
+- Deletes `dual_check_2fa_settings`, `dual_check_2fa_db_version`, `dual_check_2fa_events_db_version`, and `dual_check_2fa_trusted_devices_db_version` per site.
+- Removes all `dual_check_2fa_email` and `dual_check_2fa_exempt` user meta network-wide.
+- Clears the `dual_check_2fa_token_gc` cron hook.
 - Deletes the uploads folder `dual-check-2fa` under each site’s upload base (including log files), if present.
 
 It does **not** bulk-delete unrelated transients or other plugins’ data. Transient keys used by this plugin expire naturally.

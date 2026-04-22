@@ -4,7 +4,7 @@ Tags: two-factor, 2fa, login, security, email
 Requires at least: 6.0
 Tested up to: 6.9
 Requires PHP: 8.0
-Stable tag: 1.0.5
+
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
@@ -31,8 +31,9 @@ Dual Check 2FA adds a second step to the normal WordPress login. After a user en
 
 * Default login email is HTML with sensible defaults — works out of the box.
 * Optional custom template mode with subject, body, header, footer, and colour fields. Placeholders like `[site-name]`, `[code]`, and `[user-login]` are supported.
-* "Send test email" button on the admin screen when custom templates are enabled.
-* Mail delivery is pluggable through the `dual_check_2fa_mail_provider` filter. Default uses `wp_mail()`, so any SMTP plugin you already use will work.
+* "Send test email" on **General → Debugging** (same mail path as live codes) plus template-aware test send when custom templates are enabled.
+* Mail delivery is pluggable through the `dual_check_2fa_mail_provider` filter. Built-in HTTP APIs include SendGrid, Postmark, Mailgun, and Amazon SES; default uses `wp_mail()`, so any SMTP plugin you already use will work.
+* Optional **Login Activity** admin list, **trusted devices** (“remember this browser”), **per-user exemption**, **masked delivery hint** on the code step, and **daily cleanup** for tokens / retention.
 
 = Admin experience =
 
@@ -99,9 +100,9 @@ Yes. Settings are per site. Super admins bypass the capability matrix by default
 
 = What does it store? =
 
-* A custom table `{prefix}dual_check` for short-lived login tokens with helpful information/data.
-* Two options: `dual_check_2fa_settings` (all plugin settings) and `dual_check_2fa_db_version` (schema marker).
-* User meta `dual_check_2fa_email` if a user sets an alternate email on their profile.
+* Tables `{prefix}dual_check` (tokens), `{prefix}dual_check_events` (login activity), and `{prefix}dual_check_trusted_devices` (remembered browsers).
+* Options: `dual_check_2fa_settings` plus schema markers `dual_check_2fa_db_version`, `dual_check_2fa_events_db_version`, `dual_check_2fa_trusted_devices_db_version`.
+* User meta `dual_check_2fa_email` (alternate code address) and `dual_check_2fa_exempt` (per-user exemption when enabled).
 * Short-lived transients prefixed with `dc2fa_` (they expire on their own).
 * If debug logging is enabled: JSON log lines under `wp-content/uploads/dual-check-2fa/logs/debug.log`.
 
@@ -109,9 +110,10 @@ Yes. Settings are per site. Super admins bypass the capability matrix by default
 
 Deleting from **Plugins → Delete** runs a cleanup that:
 
-* Drops the `{prefix}dual_check` table on every site.
-* Deletes the two plugin options on every site.
-* Removes the alternate email user meta network-wide.
+* Drops the plugin tables on every site.
+* Deletes plugin options (including schema markers) on every site.
+* Removes `dual_check_2fa_email` and `dual_check_2fa_exempt` user meta network-wide.
+* Clears the `dual_check_2fa_token_gc` scheduled event.
 * Deletes the `dual-check-2fa` folder under each site's uploads (including logs), if present.
 
 It does not touch transients directly — they expire on their own — and it does not touch any other plugin's data.
@@ -135,4 +137,14 @@ Yes. Under **Dual Check 2FA → Capabilities** you can set which capabilities gr
 * **Automated tools (REST API, XML-RPC, cron) skip the second step by default.** If you want them covered too, override with the `dual_check_2fa_skip_second_factor` filter, but be aware that third-party apps using application passwords or similar cannot complete an email code step.
 * **Menu visibility with custom capabilities.** WordPress submenu registration needs a single capability string. If you configure several capabilities for a context, the first one in the list is used for menu visibility. Users matching a later capability can still use the page by URL. If that matters for your site, put the "menu owner" capability first.
 
-==
+== Changelog ==
+
+= 1.1.0 =
+* Composer classmap autoload with committed `vendor/`.
+* Daily cron: token table GC, expired trusted devices, login activity retention.
+* General → Debugging: send test email; token GC toggle; login activity toggle + retention.
+* Per-user 2FA exemption (admin profile) and trusted devices with profile revoke UI.
+* Login Activity admin page (`{prefix}dual_check_events`).
+* Masked delivery address hint on the code step; Amazon SES HTTP API provider.
+* Documentation updates for new filters, constants, and tables.
+

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Dual Check 2FA
  * Description: Email-based second step after password on the standard WordPress login.
- * Version: 1.0.5
+ * Version: 1.1.0
  * Author: Samuel Ashman
  * Text Domain: dual-check-2fa
  * License: GPLv2 or later
@@ -14,7 +14,25 @@ if (!defined('ABSPATH')) exit;
 define('DUAL_CHECK_2FA_FILE', __FILE__);
 define('DUAL_CHECK_2FA_PATH', plugin_dir_path(__FILE__));
 
-require_once DUAL_CHECK_2FA_PATH . 'includes/db/dual-check-database.php';
+$dc2fa_autoload = DUAL_CHECK_2FA_PATH . 'vendor/autoload.php';
+if (!is_readable($dc2fa_autoload)) {
+	wp_die(
+		wp_kses_post(
+			__('Dual Check 2FA is missing Composer dependencies. Run <code>composer install</code> in the plugin directory, or reinstall the plugin from a release archive that includes the <code>vendor/</code> folder.', 'dual-check-2fa')
+		),
+		esc_html__('Dual Check 2FA', 'dual-check-2fa'),
+		array('response' => 503)
+	);
+}
+
+require_once $dc2fa_autoload;
+
+register_deactivation_hook(
+	DUAL_CHECK_2FA_FILE,
+	static function (): void {
+		\DualCheck2FA\cron\Token_Gc::unschedule();
+	}
+);
 
 require_once DUAL_CHECK_2FA_PATH . 'includes/core/plugin-load.php';
 

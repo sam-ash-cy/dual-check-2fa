@@ -2,7 +2,7 @@
 
 ## Layout
 
-- Main bootstrap PHP file (`dual-check-2fa.php` in this repo) — loads DB helpers and `PluginLoad`.
+- Main bootstrap PHP file (`dual-check-2fa.php` in this repo) — loads Composer `vendor/autoload.php` and `PluginLoad`.
 - `uninstall.php` — delete-only cleanup when the plugin is removed.
 - `includes/core/plugin-load.php` — wires admin menus, login integration, profile field, DB activation.
 - `includes/core/security.php` — capability matrix, `Security::can_*`, bypass for super admin / administrator / filter.
@@ -10,7 +10,13 @@
 - `includes/integrations/login-flow.php` — intercepts `wp_login`, code step UI, session transients.
 - `includes/auth/` — code request cooldown, IP-bound code-step rate limit.
 - `includes/email/login-email-builder.php` — wraps outbound login mail HTML/text.
-- `includes/delivery/` — mail provider resolution (`registry.php`, `mail-provider-catalog.php`, `mail-credentials.php`), `delivery-options/*` (`Wp_Mail_Provider`, SendGrid, Postmark, Mailgun).
+- `includes/delivery/` — mail provider resolution (`registry.php`, `mail-provider-catalog.php`, `mail-credentials.php`), `delivery-options/*` (`Wp_Mail_Provider`, SendGrid, Postmark, Mailgun, Amazon SES).
+- `includes/cron/token-gc.php` — daily cron: token table GC, expired trusted devices, login activity retention.
+- `includes/logging/event-recorder.php` — persists `dual_check_2fa_security_event` to `{prefix}dual_check_events`.
+- `includes/admin/login-activity-page.php` — **Login Activity** list table.
+- `includes/auth/trusted-device.php` — remembered-browser cookies and `{prefix}dual_check_trusted_devices` rows.
+- `includes/admin/user-exemption.php` — per-user exemption meta + filters.
+- `includes/util/email-mask.php` — `mask_email()` for the code step hint.
 - `includes/admin/` — settings pages (general, capabilities, email), notices, user profile field.
 - `includes/logging/logger.php` — optional JSON line log under uploads.
 - `templates/email/default-template.php` — default subject/body/header/footer callables.
@@ -37,8 +43,31 @@
 | `dual_check_2fa_client_ip` | Override detected client IP for rate limits. |
 | `dual_check_2fa_bypass_capability_matrix` | bool — full bypass of cap matrix checks. |
 | `dual_check_2fa_user_can` | bool, context (`main` / `email`), array of caps — final OR check after matrix. |
+| `dual_check_2fa_per_user_exemption_enabled` | bool — gate for the “allow per-user exemption” setting. |
+| `dual_check_2fa_user_is_exempt` | bool, `WP_User` — programmatic exemption (after user meta baseline). |
+| `dual_check_2fa_token_gc_enabled` | bool — run token table garbage collection on the daily cron. |
+| `dual_check_2fa_token_gc_consumed_days` / `dual_check_2fa_token_gc_expired_days` / `dual_check_2fa_token_gc_keep_per_user` | int — GC tuning. |
+| `dual_check_2fa_general_test_email_enabled` | bool — show/use the General → Debugging “Send test email” button. |
+| `dual_check_2fa_login_activity_enabled` | bool — persist rows to `{prefix}dual_check_events`. |
+| `dual_check_2fa_login_activity_retention_days` | int — delete events older than this many days (cron). |
+| `dual_check_2fa_login_activity_record_event` | bool, event key, context array — drop noisy events. |
+| `dual_check_2fa_trusted_device_enabled` | bool — trusted device feature. |
+| `dual_check_2fa_trusted_device_days` | int — cookie lifetime (1–365). |
+| `dual_check_2fa_trusted_device_label` | string, `WP_User`, user agent — stored device label. |
+| `dual_check_2fa_mask_delivery_email` | bool — mask the delivery hint on the code step. |
+| `dual_check_2fa_masked_email_output` | string, raw email — return non-empty to replace built-in masking. |
 
 Bundled default email fragments come from the `dual_check_2fa_email_default_*` functions in `templates/email/default-template.php` (see `Login_Email_Builder::DEFAULT_TEMPLATE_FN`).
+
+## Composer (contributors)
+
+From the plugin directory:
+
+```bash
+composer install -o
+```
+
+The distributed zip includes `vendor/` and `composer.json` (see `.github/workflows/tag-archive.yml`). Without `vendor/`, the plugin shows an admin-facing error at load time until dependencies are installed.
 
 ## Settings and sanitize contexts
 
@@ -57,7 +86,7 @@ The option row `dual_check_2fa_settings` is one array. On save, hidden field `sa
 Resolution lives in `get_default_mail_provider()` (`includes/delivery/registry.php`):
 
 1. If `mail_custom_provider_enabled` is empty/false → `Wp_Mail_Provider` (WordPress `wp_mail()`).
-2. If true → `create_mail_provider_from_settings()` (`mail-provider-catalog.php`) using `mail_provider_id`: `wp_mail`, `sendgrid`, `postmark`, or `mailgun` (must remain in the filtered registry list).
+2. If true → `create_mail_provider_from_settings()` (`mail-provider-catalog.php`) using `mail_provider_id`: `wp_mail`, `sendgrid`, `postmark`, `mailgun`, or `ses` (must remain in the filtered registry list).
 3. Then `apply_filters( 'dual_check_2fa_mail_provider', $provider )`.
 
 HTTP providers use `wp_remote_post` (15s timeout); **do not** log API keys or full provider responses in debug code.
@@ -71,12 +100,16 @@ HTTP providers use `wp_remote_post` (15s timeout); **do not** log API keys or fu
 | `DUAL_CHECK_2FA_MAILGUN_API_KEY` | Mailgun private API key |
 | `DUAL_CHECK_2FA_MAILGUN_DOMAIN` | Mailgun sending domain (e.g. `mg.example.com`) |
 | `DUAL_CHECK_2FA_MAILGUN_REGION` | `us` or `eu` (API host) |
+| `DUAL_CHECK_2FA_SES_ACCESS_KEY_ID` | SES access key id |
+| `DUAL_CHECK_2FA_SES_SECRET_ACCESS_KEY` | SES secret access key |
+| `DUAL_CHECK_2FA_SES_REGION` | AWS region (e.g. `us-east-1`) |
+| `DUAL_CHECK_2FA_SES_CONFIGURATION_SET` | Optional SES configuration set name |
 
-Option keys (when constants unset): `mail_sendgrid_api_key`, `mail_postmark_server_token`, `mail_mailgun_api_key`, `mail_mailgun_domain`, `mail_mailgun_region` (`us` / `eu`). On save, **empty** password-style POST values **preserve** the previous stored secret (so other settings can be saved without re-pasting keys).
+Option keys (when constants unset): `mail_sendgrid_api_key`, `mail_postmark_server_token`, `mail_mailgun_api_key`, `mail_mailgun_domain`, `mail_mailgun_region` (`us` / `eu`), `mail_ses_access_key_id`, `mail_ses_secret_access_key`, `mail_ses_region`, `mail_ses_configuration_set`. On save, **empty** password-style POST values **preserve** the previous stored secret (so other settings can be saved without re-pasting keys).
 
 **From address:** HTTP APIs use `get_option( 'admin_email' )` as the sender; ensure it is valid and allowed by your transactional provider.
 
-**Testing:** With “Use custom email template” enabled, **Login Email Template → Send test email** uses the same `get_default_mail_provider()` path as live login codes.
+**Testing:** **General → Debugging → Send test email** uses the same `get_default_mail_provider()` path as live login codes (simple subject/body, regardless of custom template). When “Use custom email template” is enabled, **Login Email Template → Send test email** still exercises template content.
 
 ## Admin notices
 

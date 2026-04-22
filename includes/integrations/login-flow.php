@@ -3,14 +3,19 @@
 namespace DualCheck2FA\integrations;
 
 use DualCheck2FA\admin\Settings_Page;
+use DualCheck2FA\admin\User_Exemption;
 use DualCheck2FA\admin\User_Profile_Settings;
 use DualCheck2FA\auth\Code_Request_Cooldown;
 use DualCheck2FA\auth\Code_Step_Rate_Limit;
 use DualCheck2FA\auth\Code_Validator;
 use DualCheck2FA\auth\Token_Store;
+use DualCheck2FA\auth\Trusted_Device;
+use DualCheck2FA\core\Request_Context;
 use DualCheck2FA\core\Security;
 use DualCheck2FA\email\Login_Email_Builder;
 use DualCheck2FA\Logging\Logger;
+use function DualCheck2FA\db\dual_check_log_security_event;
+use function DualCheck2FA\util\mask_email;
 use function DualCheck2FA\db\dual_check_settings;
 use function DualCheck2FA\delivery\get_default_mail_provider;
 
@@ -55,6 +60,7 @@ final class LoginFlow {
 	 */
 	public function register(): void {
 		add_filter('wp_authenticate_user', array($this, 'after_password_ok_redirect_to_code_page'), 20, 2);
+		add_filter('dual_check_2fa_skip_second_factor', array(User_Exemption::class, 'filter_skip_second_factor'), 15, 2);
 		add_action('login_init', array($this, 'run_separate_code_page'), 0);
 		add_action('login_form_' . self::ACTION_CODE_PAGE, '__return_empty_string', 1);
 	}
@@ -224,6 +230,27 @@ final class LoginFlow {
 			return $user;
 		}
 
+		if (Trusted_Device::feature_enabled() && Trusted_Device::browser_is_trusted($user_id)) {
+			dual_check_log_security_event(
+				'trusted_device_used',
+				array(
+					'user_id'    => $user_id,
+					'user_login' => $user->user_login,
+					'ip'         => Request_Context::client_ip(),
+					'user_agent' => Request_Context::user_agent(),
+				)
+			);
+			Logger::debug(
+				'trusted_device_used',
+				array(
+					'user_id'    => $user_id,
+					'user_login' => $user->user_login,
+				)
+			);
+
+			return $user;
+		}
+
 		Logger::debug(
 			'twofa_triggered',
 			array(
@@ -290,7 +317,8 @@ final class LoginFlow {
 			);
 		}
 
-		$delivered = $this->deliver_login_challenge_email($user, $issued);
+		$delivery_email = User_Profile_Settings::get_delivery_email($user_id);
+		$delivered      = $this->deliver_login_challenge_email($user, $issued);
 		if (is_wp_error($delivered)) {
 			Logger::debug(
 				'twofa_failed',
@@ -315,10 +343,11 @@ final class LoginFlow {
 		set_transient(
 			self::transient_name($session),
 			array(
-				'user_id'      => $user_id,
-				'challenge_id' => (int) $issued['id'],
-				'remember'     => $remember,
-				'redirect_to'  => $redirect_to,
+				'user_id'         => $user_id,
+				'challenge_id'    => (int) $issued['id'],
+				'remember'        => $remember,
+				'redirect_to'     => $redirect_to,
+				'delivery_email'  => $delivery_email,
 			),
 			self::pending_session_ttl()
 		);
@@ -519,6 +548,10 @@ final class LoginFlow {
 
 		Code_Step_Rate_Limit::clear_counters($user_id);
 
+		if (!empty($_POST['dual_check_2fa_remember']) && Trusted_Device::feature_enabled()) {
+			Trusted_Device::issue($user_id);
+		}
+
 		delete_transient(self::transient_name($session));
 		self::clear_pending_login_cookies();
 
@@ -567,7 +600,36 @@ final class LoginFlow {
 	 * @return void
 	 */
 	private function render_code_page(string $session, \WP_Error $errors): void {
-		$message = '<p class="message">' . esc_html__('Check your email, then enter the security code below.', 'dual-check-2fa') . '</p>';
+		$pending        = get_transient(self::transient_name($session));
+		$delivery_email = '';
+		if (is_array($pending) && !empty($pending['delivery_email']) && is_string($pending['delivery_email'])) {
+			$delivery_email = $pending['delivery_email'];
+		}
+
+		$message = esc_html__('Check your email, then enter the security code below.', 'dual-check-2fa');
+		if ($delivery_email !== '' && is_email($delivery_email)) {
+			$show_masked = (bool) apply_filters('dual_check_2fa_mask_delivery_email', true);
+			if ($show_masked) {
+				$masked = apply_filters('dual_check_2fa_masked_email_output', '', $delivery_email);
+				if (!is_string($masked) || $masked === '') {
+					$masked = mask_email($delivery_email);
+				}
+			} else {
+				$masked = $delivery_email;
+			}
+			$line = wp_kses(
+				sprintf(
+					/* translators: %s: masked or full email address */
+					__('We sent a code to %s.', 'dual-check-2fa'),
+					'<strong>' . esc_html($masked) . '</strong>'
+				),
+				array(
+					'strong' => array(),
+				)
+			);
+			$message .= '<br /><br />' . $line;
+		}
+
 		login_header(__('Security code', 'dual-check-2fa'), $message, $errors);
 
 		$form_action = site_url('wp-login.php', 'login_post');
@@ -575,6 +637,14 @@ final class LoginFlow {
 		<form name="dc2fa_login" id="dc2fa_login" action="<?php echo esc_url($form_action); ?>" method="post" autocomplete="off">
 			<input type="hidden" name="action" value="<?php echo esc_attr(LoginFlow::ACTION_CODE_PAGE); ?>" />
 			<?php wp_nonce_field('dual_check_2fa_submit', 'dual_check_2fa_nonce'); ?>
+			<?php if (Trusted_Device::feature_enabled()) : ?>
+				<p>
+					<label for="dual_check_2fa_remember">
+						<input type="checkbox" name="dual_check_2fa_remember" id="dual_check_2fa_remember" value="1" />
+						<?php esc_html_e('Remember this browser (skip the code next time on this device).', 'dual-check-2fa'); ?>
+					</label>
+				</p>
+			<?php endif; ?>
 			<p>
 				<label for="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>"><?php esc_html_e('Security code', 'dual-check-2fa'); ?></label>
 				<input type="text" name="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>" id="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>" class="input" value="" size="20" autocomplete="one-time-code" required="required" />

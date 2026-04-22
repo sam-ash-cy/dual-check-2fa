@@ -31,6 +31,22 @@ final class Mail_Credentials {
 
 	public const MAILGUN_REGION_CONSTANT = 'DUAL_CHECK_2FA_MAILGUN_REGION';
 
+	public const SES_ACCESS_KEY_ID_OPTION = 'mail_ses_access_key_id';
+
+	public const SES_SECRET_ACCESS_KEY_OPTION = 'mail_ses_secret_access_key';
+
+	public const SES_REGION_OPTION = 'mail_ses_region';
+
+	public const SES_CONFIGURATION_SET_OPTION = 'mail_ses_configuration_set';
+
+	public const SES_ACCESS_KEY_ID_CONSTANT = 'DUAL_CHECK_2FA_SES_ACCESS_KEY_ID';
+
+	public const SES_SECRET_ACCESS_KEY_CONSTANT = 'DUAL_CHECK_2FA_SES_SECRET_ACCESS_KEY';
+
+	public const SES_REGION_CONSTANT = 'DUAL_CHECK_2FA_SES_REGION';
+
+	public const SES_CONFIGURATION_SET_CONSTANT = 'DUAL_CHECK_2FA_SES_CONFIGURATION_SET';
+
 	/**
 	 * Whether a non-empty constant is defined (secrets should not be echoed in admin).
 	 */

@@ -1,0 +1,24 @@
+{
+  "name": "samuelashman/dual-check-2fa",
+  "type": "wordpress-plugin",
+  "require": {
+    "php": ">=8.0"
+  },
+  "autoload": {
+    "classmap": ["includes/"],
+    "files": [
+      "includes/db/dual-check-database.php",
+      "includes/db/dual-check-events-database.php",
+      "includes/db/trusted-device-store.php",
+      "includes/core/loader.php",
+      "includes/delivery/mail-provider-catalog.php",
+      "includes/delivery/registry.php",
+      "includes/util/email-mask.php",
+      "templates/email/default-template.php"
+    ]
+  },
+  "config": {
+    "optimize-autoloader": true,
+    "sort-packages": true
+  }
+}
