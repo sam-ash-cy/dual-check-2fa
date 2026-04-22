@@ -637,6 +637,10 @@ final class LoginFlow {
 		<form name="dc2fa_login" id="dc2fa_login" action="<?php echo esc_url($form_action); ?>" method="post" autocomplete="off">
 			<input type="hidden" name="action" value="<?php echo esc_attr(LoginFlow::ACTION_CODE_PAGE); ?>" />
 			<?php wp_nonce_field('dual_check_2fa_submit', 'dual_check_2fa_nonce'); ?>
+			<p>
+				<label for="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>"><?php esc_html_e('Security code', 'dual-check-2fa'); ?></label>
+				<input type="text" name="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>" id="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>" class="input" value="" size="20" autocomplete="one-time-code" required="required" />
+			</p>
 			<?php if (Trusted_Device::feature_enabled()) : ?>
 				<p>
 					<label for="dual_check_2fa_remember">
@@ -645,10 +649,6 @@ final class LoginFlow {
 					</label>
 				</p>
 			<?php endif; ?>
-			<p>
-				<label for="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>"><?php esc_html_e('Security code', 'dual-check-2fa'); ?></label>
-				<input type="text" name="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>" id="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>" class="input" value="" size="20" autocomplete="one-time-code" required="required" />
-			</p>
 			<p class="submit">
 				<input type="submit" name="wp-submit" id="wp-submit" class="button button-primary button-large" value="<?php esc_attr_e('Continue', 'dual-check-2fa'); ?>" />
 			</p>

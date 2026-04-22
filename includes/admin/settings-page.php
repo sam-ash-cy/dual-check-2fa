@@ -96,11 +96,18 @@ final class Settings_Page implements Admin_Settings_Page {
 			self::OPTION_GROUP,
 			self::OPTION_NAME,
 			array(
-				'type'              => 'array',
-				'sanitize_callback' => array($this, 'sanitize'),
-				'default'           => self::defaults(),
+				'type'    => 'array',
+				'default' => self::defaults(),
 			)
 		);
+
+		/**
+		 * Do not register {@see self::sanitize()} as {@code sanitize_option_*} here: {@see update_option()}
+		 * always runs {@see sanitize_option()}, which would invoke that callback a second time with the
+		 * already-saved row (no {@code save_context}), so the handler would mis-detect “main” save and
+		 * revert capability changes and booleans. Sanitization runs only from {@see Settings_Save_Handler}
+		 * (and any other explicit callers) before {@see update_option()}.
+		 */
 
 		/**
 		 * Core options.php only supports a single capability per option page. This plugin saves
@@ -297,6 +304,8 @@ final class Settings_Page implements Admin_Settings_Page {
 
 	/**
 	 * Merges posted values into the stored option; supports split saves via `save_context` (main vs email).
+	 * Called explicitly from {@see Settings_Save_Handler} before {@see update_option()} — not registered
+	 * as {@code sanitize_option_*} (see {@see register_settings()}).
 	 *
 	 * @param array<string, mixed>|null $input Raw `$_POST` slice for {@see Settings_Page::OPTION_NAME}.
 	 * @return array<string, mixed>
@@ -322,6 +331,14 @@ final class Settings_Page implements Admin_Settings_Page {
 				Settings_Notices::error(
 					'dc2fa_cap_lockout',
 					__('Those capability settings were not saved because your account would no longer match “Main settings & this screen”.', 'dual-check-2fa')
+				);
+
+				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+			}
+			if (!Security::current_user_passes_activity_context_with_settings($trial)) {
+				Settings_Notices::error(
+					'dc2fa_cap_activity_lockout',
+					__('Those capability settings were not saved because your account would no longer match “Login activity”.', 'dual-check-2fa')
 				);
 
 				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
@@ -1170,6 +1187,7 @@ final class Settings_Page implements Admin_Settings_Page {
 			'cap_pool'                     => array('manage_options'),
 			'cap_context_main'             => array('manage_options'),
 			'cap_context_email'          => array('manage_options'),
+			'cap_context_activity'       => array('manage_options'),
 			'mail_custom_provider_enabled' => 0,
 			'mail_provider_id'             => 'wp_mail',
 			Mail_Credentials::SENDGRID_KEY_OPTION   => '',
@@ -1206,7 +1224,7 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 		$options['cap_pool'] = $pool;
 
-		foreach (array('cap_context_main', 'cap_context_email') as $key) {
+		foreach (array('cap_context_main', 'cap_context_email', 'cap_context_activity') as $key) {
 			$ctx = isset($options[ $key ]) && is_array($options[ $key ])
 				? Security::normalize_cap_list($options[ $key ])
 				: array();

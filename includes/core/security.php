@@ -17,6 +17,8 @@ final class Security {
 
 	public const CONTEXT_EMAIL = 'email';
 
+	public const CONTEXT_ACTIVITY = 'activity';
+
 	/**
 	 * Site “full” admins bypass the configurable capability matrix (multisite super admin or Administrator role).
 	 *
@@ -95,7 +97,7 @@ final class Security {
 	/**
 	 * Effective capability list for a context key (OR semantics). Empty stored list becomes manage_options only.
 	 *
-	 * @param string               $context_key `cap_context_main` or `cap_context_email`.
+	 * @param string               $context_key `cap_context_main`, `cap_context_email`, or `cap_context_activity`.
 	 * @param array<string, mixed>|null $settings    Optional settings row; defaults to {@see dual_check_settings()}.
 	 * @return array<int, string>
 	 */
@@ -165,6 +167,17 @@ final class Security {
 	}
 
 	/**
+	 * Submenu capability for the Login Activity screen (first slug from activity context; not OR by core).
+	 *
+	 * @return string
+	 */
+	public static function menu_capability_for_activity(): string {
+		$caps = self::effective_caps_for_context('cap_context_activity');
+
+		return $caps[0] ?? 'manage_options';
+	}
+
+	/**
 	 * Main Dual Check 2FA settings + Capabilities screen.
 	 *
 	 * @return bool
@@ -212,6 +225,47 @@ final class Security {
 		 * @param array<int, string> $caps     Effective capability list (OR).
 		 */
 		return (bool) apply_filters('dual_check_2fa_user_can', $ok, self::CONTEXT_EMAIL, $caps);
+	}
+
+	/**
+	 * Login Activity list (security events table).
+	 *
+	 * @return bool
+	 */
+	public static function can_access_login_activity(): bool {
+		if (self::bypass_capability_matrix()) {
+			$caps = self::effective_caps_for_context('cap_context_activity');
+
+			return (bool) apply_filters('dual_check_2fa_user_can', true, self::CONTEXT_ACTIVITY, $caps);
+		}
+
+		$caps = self::effective_caps_for_context('cap_context_activity');
+		$ok   = self::user_has_any_cap($caps);
+
+		/**
+		 * Filters whether the current user may view Login Activity.
+		 *
+		 * @param bool               $allowed Whether access is granted.
+		 * @param string             $context  {@see CONTEXT_ACTIVITY}.
+		 * @param array<int, string> $caps     Effective capability list (OR).
+		 */
+		return (bool) apply_filters('dual_check_2fa_user_can', $ok, self::CONTEXT_ACTIVITY, $caps);
+	}
+
+	/**
+	 * Whether the current user would pass the activity-context OR check using proposed settings.
+	 *
+	 * @param array<string, mixed> $proposed Full settings row including `cap_context_activity`.
+	 * @return bool
+	 */
+	public static function current_user_passes_activity_context_with_settings(array $proposed): bool {
+		if (self::bypass_capability_matrix()) {
+			return true;
+		}
+
+		$caps = self::effective_caps_for_context('cap_context_activity', $proposed);
+
+		return self::user_has_any_cap($caps);
 	}
 
 	/**

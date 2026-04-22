@@ -9,6 +9,10 @@ if (!defined('ABSPATH')) {
 	exit;
 }
 
+if (!class_exists('\WP_List_Table', false)) {
+	require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
+}
+
 /**
  * Admin list of persisted security / login events.
  */
@@ -49,7 +53,7 @@ final class Login_Activity_Page {
 			Settings_Page::MENU_SLUG,
 			__('Login Activity', 'dual-check-2fa'),
 			__('Login Activity', 'dual-check-2fa'),
-			Security::menu_capability_for_main(),
+			Security::menu_capability_for_activity(),
 			self::MENU_SLUG,
 			array($this, 'render_page')
 		);
@@ -77,12 +81,8 @@ final class Login_Activity_Page {
 		if (!is_user_logged_in()) {
 			wp_die(esc_html__('You must be logged in.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 403));
 		}
-		if (!Security::can_access_main_settings()) {
+		if (!Security::can_access_login_activity()) {
 			wp_die(esc_html__('You do not have permission to access this page.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 403));
-		}
-
-		if (!class_exists('\WP_List_Table')) {
-			require_once ABSPATH . 'wp-admin/includes/class-wp-list-table.php';
 		}
 
 		$table = new Login_Activity_List_Table();
@@ -123,6 +123,46 @@ final class Login_Activity_List_Table extends \WP_List_Table {
 				'ajax'     => false,
 			)
 		);
+	}
+
+	/**
+	 * Same as {@see \WP_List_Table::display()} with two adjustments for this log screen:
+	 * no duplicate {@code <tfoot>} header row; no bottom tablenav when there is only one page
+	 * (avoids a second identical “N items” line; bottom nav stays when paginated).
+	 *
+	 * @return void
+	 */
+	public function display(): void {
+		$singular = $this->_args['singular'];
+
+		$this->display_tablenav('top');
+
+		$this->screen->render_screen_reader_content('heading_list');
+		?>
+<table class="wp-list-table <?php echo implode(' ', $this->get_table_classes()); ?>">
+		<?php $this->print_table_description(); ?>
+	<thead>
+	<tr>
+		<?php $this->print_column_headers(); ?>
+	</tr>
+	</thead>
+
+	<tbody id="the-list"
+		<?php
+		if ($singular) {
+			echo " data-wp-lists='list:$singular'";
+		}
+		?>
+		>
+		<?php $this->display_rows_or_placeholder(); ?>
+	</tbody>
+
+</table>
+		<?php
+		$total_pages = isset($this->_pagination_args['total_pages']) ? (int) $this->_pagination_args['total_pages'] : 0;
+		if ($total_pages > 1) {
+			$this->display_tablenav('bottom');
+		}
 	}
 
 	/**

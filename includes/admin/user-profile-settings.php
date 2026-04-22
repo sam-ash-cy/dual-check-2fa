@@ -25,9 +25,11 @@ class User_Profile_Settings {
 	public function register(): void {
 		add_action('show_user_profile', array($this, 'render_field'));
 		add_action('edit_user_profile', array($this, 'render_field'));
+		add_action('show_user_profile', array($this, 'render_exempt_field'));
 		add_action('edit_user_profile', array($this, 'render_exempt_field'));
 		add_action('personal_options_update', array($this, 'save_field'));
 		add_action('edit_user_profile_update', array($this, 'save_field'));
+		add_action('personal_options_update', array($this, 'save_exempt_field'));
 		add_action('edit_user_profile_update', array($this, 'save_exempt_field'));
 		add_action('admin_post_dual_check_2fa_revoke_trusted_device', array($this, 'handle_revoke_trusted_device'));
 		add_action('admin_post_dual_check_2fa_revoke_all_trusted', array($this, 'handle_revoke_all_trusted'));
@@ -99,7 +101,8 @@ class User_Profile_Settings {
 	}
 
 	/**
-	 * Per-user exemption checkbox (admins only, not on self-service profile view alone — edit_user_profile fires for admins editing any user via user-edit).
+	 * Per-user exemption checkbox for users who may access Dual Check main settings.
+	 * Renders on {@code profile.php} ({@code show_user_profile}) and {@code user-edit.php} ({@code edit_user_profile}).
 	 *
 	 * @param \WP_User $user User being edited.
 	 * @return void
@@ -116,7 +119,7 @@ class User_Profile_Settings {
 		}
 
 		$checked = get_user_meta($user->ID, User_Exemption::META_KEY, true) === '1';
-		echo '<h2>' . esc_html__('Dual Check 2FA exemption', 'dual-check-2fa') . '</h2>';
+		echo '<h2>' . esc_html__('Dual Check 2FA Exemption', 'dual-check-2fa') . '</h2>';
 		echo '<table class="form-table" role="presentation"><tr>';
 		echo '<th scope="row">' . esc_html__('Second factor', 'dual-check-2fa') . '</th><td>';
 		wp_nonce_field('dual_check_2fa_exempt_save', 'dual_check_2fa_exempt_nonce');
@@ -125,7 +128,6 @@ class User_Profile_Settings {
 			checked($checked, true, false),
 			esc_html__('Exempt this user from 2FA', 'dual-check-2fa')
 		);
-		echo '<p class="description">' . esc_html__('Only accounts that can access Dual Check main settings see this checkbox.', 'dual-check-2fa') . '</p>';
 		echo '</td></tr></table>';
 	}
 
