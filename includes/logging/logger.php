@@ -1,8 +1,8 @@
 <?php
 
-namespace WP_DUAL_CHECK\Logging;
+namespace DualCheck2FA\Logging;
 
-use function WP_DUAL_CHECK\db\dual_check_settings;
+use function DualCheck2FA\db\dual_check_settings;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -68,6 +68,6 @@ final class Logger {
 			return '';
 		}
 
-		return trailingslashit((string) $upload['basedir']) . 'wp-dual-check/logs';
+		return trailingslashit((string) $upload['basedir']) . 'dual-check-2fa/logs';
 	}
 }

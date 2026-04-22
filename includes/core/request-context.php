@@ -1,6 +1,6 @@
 <?php
 
-namespace WP_DUAL_CHECK\core;
+namespace DualCheck2FA\core;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -25,7 +25,7 @@ final class Request_Context {
 		 *
 		 * @param string $ip Raw REMOTE_ADDR (or empty).
 		 */
-		$ip = (string) apply_filters('wp_dual_check_client_ip', $ip);
+		$ip = (string) apply_filters('dual_check_2fa_client_ip', $ip);
 
 		if ($ip === '' || !filter_var($ip, FILTER_VALIDATE_IP)) {
 			return '';

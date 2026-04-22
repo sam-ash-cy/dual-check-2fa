@@ -1,9 +1,9 @@
 <?php
 
-namespace WP_DUAL_CHECK\email;
+namespace DualCheck2FA\email;
 
-use WP_DUAL_CHECK\core\Plugin;
-use function WP_DUAL_CHECK\db\dual_check_settings;
+use DualCheck2FA\core\Plugin;
+use function DualCheck2FA\db\dual_check_settings;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -27,10 +27,10 @@ final class Login_Email_Builder {
 
 	/** @var array<string, string> */
 	private const DEFAULT_TEMPLATE_FN = array(
-		'subject' => 'wp_dual_check_email_default_subject',
-		'body'    => 'wp_dual_check_email_default_body',
-		'header'  => 'wp_dual_check_email_default_header',
-		'footer'  => 'wp_dual_check_email_default_footer',
+		'subject' => 'dual_check_2fa_email_default_subject',
+		'body'    => 'dual_check_2fa_email_default_body',
+		'header'  => 'dual_check_2fa_email_default_header',
+		'footer'  => 'dual_check_2fa_email_default_footer',
 	);
 
 	/**
@@ -100,7 +100,7 @@ final class Login_Email_Builder {
 			if ($tpl === '') {
 				return sprintf(
 					/* translators: %s: site name */
-					__('[%s] Your login security code', 'wp-dual-check'),
+					__('[%s] Your login security code', 'dual-check-2fa'),
 					wp_strip_all_tags($ctx['[site-name]'])
 				);
 			}
@@ -116,7 +116,7 @@ final class Login_Email_Builder {
 		if ($tpl === '') {
 			return sprintf(
 				/* translators: %s: site name */
-				__('[%s] Your login security code', 'wp-dual-check'),
+				__('[%s] Your login security code', 'dual-check-2fa'),
 				wp_strip_all_tags($ctx['[site-name]'])
 			);
 		}
@@ -231,13 +231,13 @@ final class Login_Email_Builder {
 	 */
 	private static function default_body_template(): string {
 		/* translators: Placeholder [expires] is replaced at send time; do not translate bracket tokens. */
-		$expiry_line = esc_html__('Valid until [expires].', 'wp-dual-check');
+		$expiry_line = esc_html__('Valid until [expires].', 'dual-check-2fa');
 
-		return '<p>' . esc_html__('Your sign-in code is:', 'wp-dual-check') . '</p>'
+		return '<p>' . esc_html__('Your sign-in code is:', 'dual-check-2fa') . '</p>'
 			. '<p style="font-size:24px;font-weight:700;letter-spacing:0.08em;margin:16px 0;">[code]</p>'
 			. '<p>' . $expiry_line . '</p>'
-			. '<p>' . esc_html__('Account: [user-login]', 'wp-dual-check') . '</p>'
-			. '<p>' . esc_html__('Site: [site-url]', 'wp-dual-check') . '</p>';
+			. '<p>' . esc_html__('Account: [user-login]', 'dual-check-2fa') . '</p>'
+			. '<p>' . esc_html__('Site: [site-url]', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
@@ -270,19 +270,19 @@ final class Login_Email_Builder {
 			$footer_raw = self::default_template_part('footer');
 			$header_inner = $header_raw !== ''
 				? wp_kses_post(self::replace_tokens($header_raw, $html_vals))
-				: '<p style="margin:0;font-size:16px;font-weight:600;">' . esc_html__('Security code', 'wp-dual-check') . '</p>';
+				: '<p style="margin:0;font-size:16px;font-weight:600;">' . esc_html__('Security code', 'dual-check-2fa') . '</p>';
 			$footer_inner = $footer_raw !== ''
 				? wp_kses_post(self::replace_tokens($footer_raw, $html_vals))
-				: '<p style="margin:0;font-size:12px;color:#50575e;">' . esc_html__('If you did not try to sign in, you can ignore this email.', 'wp-dual-check') . '</p>';
+				: '<p style="margin:0;font-size:12px;color:#50575e;">' . esc_html__('If you did not try to sign in, you can ignore this email.', 'dual-check-2fa') . '</p>';
 		} else {
 			$header_raw = isset($settings['email_header_html']) ? trim((string) $settings['email_header_html']) : '';
 			$footer_raw = isset($settings['email_footer_html']) ? trim((string) $settings['email_footer_html']) : '';
 			$header_inner = $header_raw !== ''
 				? wp_kses_post(self::replace_tokens($header_raw, $html_vals))
-				: '<p style="margin:0;font-size:16px;font-weight:600;">' . esc_html__('Security code', 'wp-dual-check') . '</p>';
+				: '<p style="margin:0;font-size:16px;font-weight:600;">' . esc_html__('Security code', 'dual-check-2fa') . '</p>';
 			$footer_inner = $footer_raw !== ''
 				? wp_kses_post(self::replace_tokens($footer_raw, $html_vals))
-				: '<p style="margin:0;font-size:12px;color:#50575e;">' . esc_html__('If you did not try to sign in, you can ignore this email.', 'wp-dual-check') . '</p>';
+				: '<p style="margin:0;font-size:12px;color:#50575e;">' . esc_html__('If you did not try to sign in, you can ignore this email.', 'dual-check-2fa') . '</p>';
 		}
 
 		$inner_safe = wp_kses_post($inner_html);
@@ -297,8 +297,8 @@ final class Login_Email_Builder {
 			. '<tr><td align="center">'
 			. '<table role="presentation" cellpadding="0" cellspacing="0" width="100%" style="max-width:560px;background:#ffffff;border-radius:4px;overflow:hidden;border:1px solid #dcdcde;">'
 			. '<tr><td bgcolor="' . $head_esc . '" style="background:' . esc_attr($head_bg) . ';color:#ffffff;padding:18px 20px;">' . $header_inner . '</td></tr>'
-			. '<tr><td style="padding:24px 20px;color:#1d2327;font-size:15px;line-height:1.5;" class="wpdc-mail-body">'
-			. '<style type="text/css">.wpdc-mail-body a{color:' . $link_esc . ';}</style>'
+			. '<tr><td style="padding:24px 20px;color:#1d2327;font-size:15px;line-height:1.5;" class="dc2fa-mail-body">'
+			. '<style type="text/css">.dc2fa-mail-body a{color:' . $link_esc . ';}</style>'
 			. $inner_safe
 			. '</td></tr>'
 			. '<tr><td bgcolor="' . $foot_esc . '" style="background:' . esc_attr($foot_bg) . ';padding:14px 20px;color:#1d2327;">' . $footer_inner . '</td></tr>'
