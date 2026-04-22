@@ -2,7 +2,7 @@
 
 ## Layout
 
-- Main bootstrap PHP file (`wp-dual-check.php` in this repo) — loads DB helpers and `PluginLoad`.
+- Main bootstrap PHP file (`dual-check-2fa.php` in this repo) — loads DB helpers and `PluginLoad`.
 - `uninstall.php` — delete-only cleanup when the plugin is removed.
 - `includes/core/plugin-load.php` — wires admin menus, login integration, profile field, DB activation.
 - `includes/core/security.php` — capability matrix, `Security::can_*`, bypass for super admin / administrator / filter.
