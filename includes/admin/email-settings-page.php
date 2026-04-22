@@ -179,12 +179,11 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		echo '</form>';
 
 		echo '<hr />';
-		echo '<h2>' . esc_html__('Send test email', 'wp-dual-check') . '</h2>';
-		echo '<p class="description">' . esc_html__('Sends a sample login-style message to your account email (placeholder code 000000).', 'wp-dual-check') . '</p>';
+		echo '<h2>' . esc_html__('Send Test Email', 'wp-dual-check') . '</h2>';
 		echo '<form method="post" action="' . esc_url(admin_url('admin-post.php')) . '">';
 		wp_nonce_field('wp_dual_check_test_email');
 		echo '<input type="hidden" name="action" value="wp_dual_check_test_email" />';
-		submit_button(__('Send test email', 'wp-dual-check'), 'secondary');
+		submit_button(__('Send Test Email', 'wp-dual-check'), 'secondary');
 		echo '</form></div>';
 	}
 

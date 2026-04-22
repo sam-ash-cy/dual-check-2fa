@@ -14,8 +14,6 @@ Adds an email verification code after the user has logged in on the standard Wor
 
 WP Dual Check adds a second step to the normal WordPress login. After a user enters the right username and password on `wp-login.php`, the plugin emails them a short code. They enter that code on a follow-up screen to finish signing in.
 
-It is meant to be easy to switch on and stay out of the way. There is no phone app to set up, no QR codes, and no extra account for users to create. If they can receive email, they can use it.
-
 = What you get =
 
 * Email code step after a correct password, on the standard login form.
