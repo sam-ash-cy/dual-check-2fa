@@ -154,7 +154,8 @@ function generate_token_hash($value) {
  * @param int|string         $user_id    WordPress user ID.
  * @param string             $token_type Row discriminator (e.g. {@see DUAL_CHECK_TOKEN_TYPE_LOGIN}).
  * @param string             $context    Short free-text context (stored truncated).
- * @param int|string|null    $expires_at MySQL datetime or strtotime()-parseable string; null uses settings lifetime.
+ * @param int|string|null    $expires_at Unix timestamp or a GMT `strtotime()`-parseable string (include an explicit UTC
+ *                                       offset when passing a string). Null uses the lifetime from settings.
  * @return array{plain: string, id: int}|false
  */
 function add_dual_check_token($user_id, $token_type, $context = '', $expires_at = null) {
@@ -189,14 +190,17 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 	}
 
 	if ($expires_at) {
-		$ts = strtotime((string) $expires_at);
-		if ($ts === false) {
+		if (is_int($expires_at) || (is_string($expires_at) && ctype_digit($expires_at))) {
+			$ts = (int) $expires_at;
+		} else {
+			$ts = strtotime((string) $expires_at);
+		}
+		if ($ts === false || $ts <= 0) {
 			return false;
 		}
-		$expires_at = date('Y-m-d H:i:s', $ts);
+		$expires_at = gmdate('Y-m-d H:i:s', $ts);
 	} else {
-		$minutes = (int) $settings['code_lifetime_minutes'];
-		// Store in GMT (same basis as current_time(..., true) in verify) so comparisons stay correct.
+		$minutes    = (int) $settings['code_lifetime_minutes'];
 		$expires_at = gmdate('Y-m-d H:i:s', time() + ($minutes * 60));
 	}
 

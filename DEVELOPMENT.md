@@ -72,8 +72,6 @@ HTTP providers use `wp_remote_post` (15s timeout); **do not** log API keys or fu
 | `DUAL_CHECK_2FA_MAILGUN_DOMAIN` | Mailgun sending domain (e.g. `mg.example.com`) |
 | `DUAL_CHECK_2FA_MAILGUN_REGION` | `us` or `eu` (API host) |
 
-Legacy `WP_DUAL_CHECK_*` names for the same secrets are still read if the `DUAL_CHECK_2FA_*` constant is not set.
-
 Option keys (when constants unset): `mail_sendgrid_api_key`, `mail_postmark_server_token`, `mail_mailgun_api_key`, `mail_mailgun_domain`, `mail_mailgun_region` (`us` / `eu`). On save, **empty** password-style POST values **preserve** the previous stored secret (so other settings can be saved without re-pasting keys).
 
 **From address:** HTTP APIs use `get_option( 'admin_email' )` as the sender; ensure it is valid and allowed by your transactional provider.

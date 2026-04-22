@@ -51,10 +51,11 @@ final class Mailgun_Mail_Provider implements Mail_Provider_Interface {
 			return false;
 		}
 
-		$region = isset($this->settings['mail_mailgun_region']) ? sanitize_key((string) $this->settings['mail_mailgun_region']) : 'us';
-		if (Mail_Credentials::constant_is_set(Mail_Credentials::MAILGUN_REGION_CONSTANT)) {
-			$region = sanitize_key((string) constant(Mail_Credentials::MAILGUN_REGION_CONSTANT));
-		}
+		$region = sanitize_key(Mail_Credentials::constant_or_option(
+			Mail_Credentials::MAILGUN_REGION_CONSTANT,
+			Mail_Credentials::MAILGUN_REGION_OPTION,
+			$this->settings
+		));
 		$base = $region === 'eu' ? 'https://api.eu.mailgun.net' : 'https://api.mailgun.net';
 
 		$from_email = Mail_Credentials::default_from_email();

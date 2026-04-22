@@ -341,8 +341,10 @@ final class Settings_Page implements Admin_Settings_Page {
 			$d = (string) preg_replace('#^https?://#', '', $d);
 			$out['mail_mailgun_domain'] = trim($d, '/');
 		}
-		$reg = isset($input['mail_mailgun_region']) ? sanitize_key((string) $input['mail_mailgun_region']) : '';
-		$out['mail_mailgun_region'] = $reg === 'eu' ? 'eu' : 'us';
+		$reg = isset($input[ Mail_Credentials::MAILGUN_REGION_OPTION ])
+			? sanitize_key((string) $input[ Mail_Credentials::MAILGUN_REGION_OPTION ])
+			: '';
+		$out[ Mail_Credentials::MAILGUN_REGION_OPTION ] = $reg === 'eu' ? 'eu' : 'us';
 
 		return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 	}
@@ -463,8 +465,7 @@ final class Settings_Page implements Admin_Settings_Page {
 	}
 
 	/**
-	 * @param string               $n    Option array name.
-	 * @param array<string, mixed> $opts Current options.
+	 * @param string $n Option array name.
 	 */
 	private function render_mail_provider_postmark_row(string $n): void {
 		$key_opt = Mail_Credentials::POSTMARK_TOKEN_OPTION;
@@ -497,7 +498,7 @@ final class Settings_Page implements Admin_Settings_Page {
 		$dom_opt  = Mail_Credentials::MAILGUN_DOMAIN_OPTION;
 		$k_const  = Mail_Credentials::MAILGUN_KEY_CONSTANT;
 		$d_const  = Mail_Credentials::MAILGUN_DOMAIN_CONSTANT;
-		$region   = isset($opts['mail_mailgun_region']) && sanitize_key((string) $opts['mail_mailgun_region']) === 'eu' ? 'eu' : 'us';
+		$region   = isset($opts[ Mail_Credentials::MAILGUN_REGION_OPTION ]) && sanitize_key((string) $opts[ Mail_Credentials::MAILGUN_REGION_OPTION ]) === 'eu' ? 'eu' : 'us';
 		$domain_v = '';
 		if (!Mail_Credentials::constant_is_set($d_const) && isset($opts[ $dom_opt ]) && is_string($opts[ $dom_opt ])) {
 			$domain_v = esc_attr($opts[ $dom_opt ]);
@@ -526,12 +527,13 @@ final class Settings_Page implements Admin_Settings_Page {
 		} else {
 			echo '<p><label for="wpdc_mg_region">' . esc_html__('API region', 'dual-check-2fa') . '</label><br />';
 			printf(
-				'<select id="wpdc_mg_region" name="%1$s[mail_mailgun_region]"><option value="us" %2$s>%3$s</option><option value="eu" %4$s>%5$s</option></select></p>',
+				'<select id="wpdc_mg_region" name="%1$s[%6$s]"><option value="us" %2$s>%3$s</option><option value="eu" %4$s>%5$s</option></select></p>',
 				esc_attr($n),
 				selected($region, 'us', false),
 				esc_html__('United States (api.mailgun.net)', 'dual-check-2fa'),
 				selected($region, 'eu', false),
-				esc_html__('Europe (api.eu.mailgun.net)', 'dual-check-2fa')
+				esc_html__('Europe (api.eu.mailgun.net)', 'dual-check-2fa'),
+				esc_attr(Mail_Credentials::MAILGUN_REGION_OPTION)
 			);
 		}
 		if (Mail_Credentials::constant_is_set($k_const)) {
@@ -811,7 +813,7 @@ final class Settings_Page implements Admin_Settings_Page {
 			Mail_Credentials::POSTMARK_TOKEN_OPTION => '',
 			Mail_Credentials::MAILGUN_KEY_OPTION    => '',
 			Mail_Credentials::MAILGUN_DOMAIN_OPTION   => '',
-			'mail_mailgun_region'          => 'us',
+			Mail_Credentials::MAILGUN_REGION_OPTION   => 'us',
 		);
 	}
 

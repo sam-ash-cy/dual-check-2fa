@@ -401,7 +401,8 @@ final class LoginFlow {
 			return;
 		}
 
-		if ('POST' === $_SERVER['REQUEST_METHOD'] && isset($_POST['dual_check_2fa_nonce'])) {
+		$method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : '';
+		if ($method === 'POST' && isset($_POST['dual_check_2fa_nonce'])) {
 			$this->handle_code_page_post($session, $pending);
 
 			return;
