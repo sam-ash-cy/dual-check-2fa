@@ -1,6 +1,6 @@
 <?php
 
-namespace WP_DUAL_CHECK\admin;
+namespace DualCheck2FA\admin;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -19,11 +19,11 @@ interface Admin_Settings_Page {
 }
 
 /**
- * Shared {@see add_settings_error()} / {@see settings_errors()} group for WP Dual Check screens.
+ * Shared {@see add_settings_error()} / {@see settings_errors()} group for Dual Check 2FA screens.
  */
 final class Settings_Notices {
 
-	public const GROUP = 'wp_dual_check';
+	public const GROUP = 'dual_check_2fa';
 
 	/**
 	 * Queues an error notice for the next settings screen render.
@@ -33,7 +33,7 @@ final class Settings_Notices {
 	 * @return void
 	 */
 	public static function error(string $code, string $message): void {
-		add_settings_error(self::GROUP, $code, $message, 'error');
+		add_settings_error(Settings_Notices::GROUP, $code, $message, 'error');
 	}
 
 	/**
@@ -44,19 +44,19 @@ final class Settings_Notices {
 	 * @return void
 	 */
 	public static function success(string $code, string $message): void {
-		add_settings_error(self::GROUP, $code, $message, 'success');
+		add_settings_error(Settings_Notices::GROUP, $code, $message, 'success');
 	}
 
 	/**
 	 * Prints queued notices for this plugin’s group.
 	 *
 	 * Core’s “Settings saved.” after {@see options.php} is registered under the
-	 * {@see 'general'} group; this plugin’s custom notices use {@see self::GROUP}.
+	 * {@see 'general'} group; this plugin’s custom notices use {@see Settings_Notices::GROUP}.
 	 *
 	 * @return void
 	 */
 	public static function render(): void {
 		settings_errors('general');
-		settings_errors(self::GROUP);
+		settings_errors(Settings_Notices::GROUP);
 	}
 }

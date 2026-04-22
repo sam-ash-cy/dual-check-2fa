@@ -1,6 +1,6 @@
 <?php
 
-namespace WP_DUAL_CHECK\auth;
+namespace DualCheck2FA\auth;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -8,7 +8,7 @@ if (!defined('ABSPATH')) {
 
 /**
  * Random codes for non-DB flows (backup codes, SMS, etc.).
- * Login email codes normally come from {@see \WP_DUAL_CHECK\db\add_dual_check_token()} (length from settings).
+ * Login email codes normally come from {@see \DualCheck2FA\db\add_dual_check_token()} (length from settings).
  */
 final class Code_Generator {
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace WP_DUAL_CHECK\delivery;
+namespace DualCheck2FA\delivery;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -19,19 +19,19 @@ function get_registered_mail_providers(): array {
 	$builtins = array(
 		array(
 			'id'    => 'wp_mail',
-			'label' => __('WordPress wp_mail()', 'wp-dual-check'),
+			'label' => __('WordPress wp_mail()', 'dual-check-2fa'),
 		),
 		array(
 			'id'    => 'sendgrid',
-			'label' => __('SendGrid (HTTP API)', 'wp-dual-check'),
+			'label' => __('SendGrid (HTTP API)', 'dual-check-2fa'),
 		),
 		array(
 			'id'    => 'postmark',
-			'label' => __('Postmark (HTTP API)', 'wp-dual-check'),
+			'label' => __('Postmark (HTTP API)', 'dual-check-2fa'),
 		),
 		array(
 			'id'    => 'mailgun',
-			'label' => __('Mailgun (HTTP API)', 'wp-dual-check'),
+			'label' => __('Mailgun (HTTP API)', 'dual-check-2fa'),
 		),
 	);
 
@@ -40,7 +40,7 @@ function get_registered_mail_providers(): array {
 	 *
 	 * @param array<int, array{id: string, label: string}> $builtins Core providers.
 	 */
-	return (array) apply_filters('wp_dual_check_registered_mail_providers', $builtins);
+	return (array) apply_filters('dual_check_2fa_registered_mail_providers', $builtins);
 }
 
 /**

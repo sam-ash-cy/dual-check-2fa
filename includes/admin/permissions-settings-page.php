@@ -1,9 +1,9 @@
 <?php
 
-namespace WP_DUAL_CHECK\admin;
+namespace DualCheck2FA\admin;
 
-use WP_DUAL_CHECK\core\Security;
-use function WP_DUAL_CHECK\db\dual_check_settings;
+use DualCheck2FA\core\Security;
+use function DualCheck2FA\db\dual_check_settings;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -14,7 +14,7 @@ if (!defined('ABSPATH')) {
  */
 final class Permissions_Settings_Page implements Admin_Settings_Page {
 
-	public const PAGE = 'wp-dual-check-permissions';
+	public const PAGE = 'dual-check-2fa-permissions';
 
 	/**
 	 * Built-in capability slugs offered as checkboxes for the pool.
@@ -44,8 +44,8 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 	public function add_menu(): void {
 		add_submenu_page(
 			Settings_Page::MENU_SLUG,
-			__('Capabilities', 'wp-dual-check'),
-			__('Capabilities', 'wp-dual-check'),
+			__('Capabilities', 'dual-check-2fa'),
+			__('Capabilities', 'dual-check-2fa'),
 			Security::menu_capability_for_main(),
 			self::PAGE,
 			array($this, 'render_page')
@@ -57,38 +57,38 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 	 */
 	public function register_fields(): void {
 		add_settings_section(
-			'wpdc_cap_pool',
-			__('Capability pool', 'wp-dual-check'),
+			'dc2fa_cap_pool',
+			__('Capability pool', 'dual-check-2fa'),
 			array($this, 'section_pool_intro'),
 			self::PAGE
 		);
 
 		add_settings_field(
 			'cap_presets',
-			__('Built-in capabilities', 'wp-dual-check'),
+			__('Built-in capabilities', 'dual-check-2fa'),
 			array($this, 'field_cap_presets'),
 			self::PAGE,
-			'wpdc_cap_pool'
+			'dc2fa_cap_pool'
 		);
 
 		add_settings_field(
 			'cap_custom',
-			__('Additional capabilities (one per line)', 'wp-dual-check'),
+			__('Additional capabilities (one per line)', 'dual-check-2fa'),
 			array($this, 'field_cap_custom'),
 			self::PAGE,
-			'wpdc_cap_pool'
+			'dc2fa_cap_pool'
 		);
 
 		add_settings_section(
-			'wpdc_cap_main',
-			__('Main settings & this screen', 'wp-dual-check'),
+			'dc2fa_cap_main',
+			__('Main settings & this screen', 'dual-check-2fa'),
 			array($this, 'section_main_intro'),
 			self::PAGE
 		);
 
 		add_settings_section(
-			'wpdc_cap_email',
-			__('Login email template', 'wp-dual-check'),
+			'dc2fa_cap_email',
+			__('Login email template', 'dual-check-2fa'),
 			array($this, 'section_email_intro'),
 			self::PAGE
 		);
@@ -98,14 +98,14 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function section_pool_intro(): void {
-		echo '<p class="description">' . esc_html__('Select capabilities to include in the pool. Each access rule below can only use caps from this pool (plus you can add custom slugs).', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('Select capabilities to include in the pool. Each access rule below can only use caps from this pool (plus you can add custom slugs).', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
 	 * @return void
 	 */
 	public function section_main_intro(): void {
-		echo '<p class="description">' . esc_html__('Users who have any one of the selected capabilities may open General settings, save them, and use this Capabilities screen.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('Users who have any one of the selected capabilities may open General settings, save them, and use this Capabilities screen.', 'dual-check-2fa') . '</p>';
 		$this->render_context_checkboxes('cap_context_main', 'cap_main');
 	}
 
@@ -113,7 +113,7 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function section_email_intro(): void {
-		echo '<p class="description">' . esc_html__('Users who have any one of the selected capabilities may use the Login Email Template screen (when custom template is enabled) and send test emails.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('Users who have any one of the selected capabilities may use the Login Email Template screen (when custom template is enabled) and send test emails.', 'dual-check-2fa') . '</p>';
 		$this->render_context_checkboxes('cap_context_email', 'cap_email');
 	}
 
@@ -129,7 +129,7 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 		$name    = Settings_Page::OPTION_NAME;
 
 		foreach ($pool as $slug) {
-			$id    = 'wpdc_' . $post_prefix . '_' . $slug;
+			$id    = 'dc2fa_' . $post_prefix . '_' . $slug;
 			$check = in_array($slug, $active, true);
 			printf(
 				'<p><label for="%1$s"><input type="checkbox" id="%1$s" name="%2$s[%3$s][%4$s]" value="1" %5$s /> <code>%4$s</code></label></p>',
@@ -175,11 +175,11 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 		}
 		$text = implode("\n", $extra);
 		printf(
-			'<textarea class="large-text code" rows="4" name="%1$s[cap_custom]" id="wpdc_cap_custom">%2$s</textarea>',
+			'<textarea class="large-text code" rows="4" name="%1$s[cap_custom]" id="dc2fa_cap_custom">%2$s</textarea>',
 			esc_attr(Settings_Page::OPTION_NAME),
 			esc_textarea($text)
 		);
-		echo '<p class="description">' . esc_html__('Lowercase letters, digits, and underscores only. One capability per line (or comma-separated).', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('Lowercase letters, digits, and underscores only. One capability per line (or comma-separated).', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
@@ -187,18 +187,18 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 	 */
 	public function render_page(): void {
 		if (!is_user_logged_in()) {
-			wp_die(esc_html__('You must be logged in.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
+			wp_die(esc_html__('You must be logged in.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 403));
 		}
 		if (!Security::can_access_main_settings()) {
-			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
+			wp_die(esc_html__('You do not have permission to access this page.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 403));
 		}
 
-		echo '<div class="wrap"><h1>' . esc_html__('WP Dual Check — Capabilities', 'wp-dual-check') . '</h1>';
+		echo '<div class="wrap"><h1>' . esc_html__('Dual Check 2FA — Capabilities', 'dual-check-2fa') . '</h1>';
 		Settings_Notices::render();
-		Settings_Save_Handler::render_form_open(self::PAGE);
+		Settings_Save_Handler::render_form_open(Permissions_Settings_Page::PAGE);
 		printf('<input type="hidden" name="%s[save_context]" value="permissions" />', esc_attr(Settings_Page::OPTION_NAME));
-		do_settings_sections(self::PAGE);
-		submit_button(__('Save capabilities', 'wp-dual-check'));
+		do_settings_sections(Permissions_Settings_Page::PAGE);
+		submit_button(__('Save capabilities', 'dual-check-2fa'));
 		echo '</form></div>';
 	}
 

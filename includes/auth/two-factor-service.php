@@ -1,8 +1,8 @@
 <?php
 
-namespace WP_DUAL_CHECK\auth;
+namespace DualCheck2FA\auth;
 
-use WP_DUAL_CHECK\admin\Settings_Page;
+use DualCheck2FA\admin\Settings_Page;
 
 if (!defined('ABSPATH')) {
 	exit;

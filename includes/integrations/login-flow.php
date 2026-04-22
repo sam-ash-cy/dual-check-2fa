@@ -1,18 +1,18 @@
 <?php
 
-namespace WP_DUAL_CHECK\integrations;
+namespace DualCheck2FA\integrations;
 
-use WP_DUAL_CHECK\admin\Settings_Page;
-use WP_DUAL_CHECK\admin\User_Profile_Settings;
-use WP_DUAL_CHECK\auth\Code_Request_Cooldown;
-use WP_DUAL_CHECK\auth\Code_Step_Rate_Limit;
-use WP_DUAL_CHECK\auth\Code_Validator;
-use WP_DUAL_CHECK\auth\Token_Store;
-use WP_DUAL_CHECK\core\Security;
-use WP_DUAL_CHECK\email\Login_Email_Builder;
-use WP_DUAL_CHECK\Logging\Logger;
-use function WP_DUAL_CHECK\db\dual_check_settings;
-use function WP_DUAL_CHECK\delivery\get_default_mail_provider;
+use DualCheck2FA\admin\Settings_Page;
+use DualCheck2FA\admin\User_Profile_Settings;
+use DualCheck2FA\auth\Code_Request_Cooldown;
+use DualCheck2FA\auth\Code_Step_Rate_Limit;
+use DualCheck2FA\auth\Code_Validator;
+use DualCheck2FA\auth\Token_Store;
+use DualCheck2FA\core\Security;
+use DualCheck2FA\email\Login_Email_Builder;
+use DualCheck2FA\Logging\Logger;
+use function DualCheck2FA\db\dual_check_settings;
+use function DualCheck2FA\delivery\get_default_mail_provider;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -23,30 +23,30 @@ if (!defined('ABSPATH')) {
  * wp-login screen that only asks for that code (no second password on that screen).
  *
  * Filters (see each call site):
- * - `wp_dual_check_site_requires_second_factor` — bool from saved option.
- * - `wp_dual_check_skip_second_factor` — skip email step (bool, \WP_User); core pre-sets REST/XML‑RPC/cron.
- * - `wp_dual_check_mail_provider` — final override in {@see \WP_DUAL_CHECK\delivery\get_default_mail_provider()} (after saved provider).
- * - `wp_dual_check_registered_mail_providers` — rows for the General settings dropdown; unknown ids still resolve via the mail_provider filter.
- * - `wp_dual_check_code_step_ip_binding_enabled` — in {@see \WP_DUAL_CHECK\auth\Code_Step_Rate_Limit::is_binding_enabled()}.
- * - `wp_dual_check_code_step_ip_max_fails`, `wp_dual_check_code_step_ip_lockout_seconds` — lockout tuning.
- * - `wp_dual_check_record_code_step_failure` — whether to count a failed verify toward IP lockout (bool, reason, user id).
+ * - `dual_check_2fa_site_requires_second_factor` — bool from saved option.
+ * - `dual_check_2fa_skip_second_factor` — skip email step (bool, \WP_User); core pre-sets REST/XML‑RPC/cron.
+ * - `dual_check_2fa_mail_provider` — final override in {@see \DualCheck2FA\delivery\get_default_mail_provider()} (after saved provider).
+ * - `dual_check_2fa_registered_mail_providers` — rows for the General settings dropdown; unknown ids still resolve via the mail_provider filter.
+ * - `dual_check_2fa_code_step_ip_binding_enabled` — in {@see \DualCheck2FA\auth\Code_Step_Rate_Limit::is_binding_enabled()}.
+ * - `dual_check_2fa_code_step_ip_max_fails`, `dual_check_2fa_code_step_ip_lockout_seconds` — lockout tuning.
+ * - `dual_check_2fa_record_code_step_failure` — whether to count a failed verify toward IP lockout (bool, reason, user id).
  */
 final class LoginFlow {
 
 	public const POST_CODE_KEY = 'dual_check_code';
 
-	public const ACTION_CODE_PAGE = 'wp_dual_check';
+	public const ACTION_CODE_PAGE = 'dual_check_2fa';
 
 	/**
-	 * Legacy query key (still read if present so old links work once).
-	 * New logins use {@see COOKIE_PENDING} only — the token is not added to the URL.
+	 * Optional query key for the pending-login session token (cookie is preferred).
+	 * New logins use {@see COOKIE_PENDING}; the token is not added to the URL by default.
 	 */
-	public const QUERY_SESSION = 'wpdc_session';
+	public const QUERY_SESSION = 'dc2fa_session';
 
-	private const TRANSIENT_PREFIX = 'wpdc_sess_';
+	private const TRANSIENT_PREFIX = 'dc2fa_sess_';
 
 	/** HttpOnly pending-login handle (48 hex chars), SameSite Strict. */
-	private const COOKIE_PENDING = 'wp_dual_check_pending';
+	private const COOKIE_PENDING = 'dual_check_2fa_pending';
 
 	/**
 	 * Hooks the post-password redirect and the dedicated code-entry login action.
@@ -72,7 +72,7 @@ final class LoginFlow {
 		 *
 		 * @param bool $required Value from {@see Settings_Page::is_2fa_required_for_all()}.
 		 */
-		return (bool) apply_filters('wp_dual_check_site_requires_second_factor', $required);
+		return (bool) apply_filters('dual_check_2fa_site_requires_second_factor', $required);
 	}
 
 	/**
@@ -95,7 +95,7 @@ final class LoginFlow {
 	}
 
 	/**
-	 * Reads the pending-login token from the HttpOnly cookie (preferred) or legacy query arg.
+	 * Reads the pending-login token from the HttpOnly cookie (preferred) or the session query arg.
 	 *
 	 * @return string 48-character lowercase hex, or empty string if missing/invalid.
 	 */
@@ -200,7 +200,7 @@ final class LoginFlow {
 		if ($user_id <= 0) {
 			return new \WP_Error(
 				'dual_check_invalid_user',
-				__('Invalid user.', 'wp-dual-check')
+				__('Invalid user.', 'dual-check-2fa')
 			);
 		}
 
@@ -219,7 +219,7 @@ final class LoginFlow {
 		 * @param bool     $skip Whether to skip 2FA (core pre-sets true for REST, XML‑RPC, cron).
 		 * @param \WP_User $user Authenticated user.
 		 */
-		$skip = (bool) apply_filters('wp_dual_check_skip_second_factor', $skip, $user);
+		$skip = (bool) apply_filters('dual_check_2fa_skip_second_factor', $skip, $user);
 		if ($skip) {
 			return $user;
 		}
@@ -247,7 +247,7 @@ final class LoginFlow {
 				'dual_check_code_step_locked',
 				sprintf(
 					/* translators: %d: seconds until retry */
-					__('Too many wrong codes from this connection. Try again in %d seconds.', 'wp-dual-check'),
+					__('Too many wrong codes from this connection. Try again in %d seconds.', 'dual-check-2fa'),
 					$lock_wait
 				)
 			);
@@ -268,7 +268,7 @@ final class LoginFlow {
 				'dual_check_cooldown',
 				sprintf(
 					/* translators: %d: seconds to wait */
-					__('Please wait %d seconds before requesting another login code.', 'wp-dual-check'),
+					__('Please wait %d seconds before requesting another login code.', 'dual-check-2fa'),
 					$wait
 				)
 			);
@@ -286,7 +286,7 @@ final class LoginFlow {
 
 			return new \WP_Error(
 				'dual_check_issue',
-				__('Could not create a login code. Please try again in a moment.', 'wp-dual-check')
+				__('Could not create a login code. Please try again in a moment.', 'dual-check-2fa')
 			);
 		}
 
@@ -392,7 +392,7 @@ final class LoginFlow {
 				'dual_check_code_step_locked',
 				sprintf(
 					/* translators: %d: seconds until retry */
-					__('Too many wrong codes. Try again in %d seconds.', 'wp-dual-check'),
+					__('Too many wrong codes. Try again in %d seconds.', 'dual-check-2fa'),
 					$lock_wait
 				)
 			);
@@ -401,7 +401,7 @@ final class LoginFlow {
 			return;
 		}
 
-		if ('POST' === $_SERVER['REQUEST_METHOD'] && isset($_POST['wp_dual_check_nonce'])) {
+		if ('POST' === $_SERVER['REQUEST_METHOD'] && isset($_POST['dual_check_2fa_nonce'])) {
 			$this->handle_code_page_post($session, $pending);
 
 			return;
@@ -418,7 +418,7 @@ final class LoginFlow {
 	 * @return void
 	 */
 	private function handle_code_page_post(string $session, array $pending): void {
-		if (!isset($_POST['wp_dual_check_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash((string) $_POST['wp_dual_check_nonce'])), 'wp_dual_check_submit')) {
+		if (!isset($_POST['dual_check_2fa_nonce']) || !wp_verify_nonce(sanitize_text_field(wp_unslash((string) $_POST['dual_check_2fa_nonce'])), 'dual_check_2fa_submit')) {
 			Logger::debug(
 				'twofa_failed',
 				array(
@@ -426,7 +426,7 @@ final class LoginFlow {
 					'reason'  => 'invalid_nonce',
 				)
 			);
-			wp_die(esc_html__('Invalid request. Go back and try again.', 'wp-dual-check'), esc_html__('Security check failed', 'wp-dual-check'), 400);
+			wp_die(esc_html__('Invalid request. Go back and try again.', 'dual-check-2fa'), esc_html__('Security check failed', 'dual-check-2fa'), 400);
 		}
 
 		$user_id = (int) $pending['user_id'];
@@ -445,7 +445,7 @@ final class LoginFlow {
 				'dual_check_code_step_locked',
 				sprintf(
 					/* translators: %d: seconds until retry */
-					__('Too many wrong codes. Try again in %d seconds.', 'wp-dual-check'),
+					__('Too many wrong codes. Try again in %d seconds.', 'dual-check-2fa'),
 					$lock_wait
 				)
 			);
@@ -466,7 +466,7 @@ final class LoginFlow {
 					'reason'       => 'empty_code',
 				)
 			);
-			$errors = new \WP_Error('dual_check_empty', __('Please enter the code from your email.', 'wp-dual-check'));
+			$errors = new \WP_Error('dual_check_empty', __('Please enter the code from your email.', 'dual-check-2fa'));
 			$this->render_code_page($session, $errors);
 
 			return;
@@ -490,10 +490,10 @@ final class LoginFlow {
 			 * @param string $reason  Internal reason key (`wrong_code`).
 			 * @param int    $user_id User id from the pending session.
 			 */
-			if (apply_filters('wp_dual_check_record_code_step_failure', true, 'wrong_code', $user_id)) {
+			if (apply_filters('dual_check_2fa_record_code_step_failure', true, 'wrong_code', $user_id)) {
 				Code_Step_Rate_Limit::record_failed_verify($user_id);
 			}
-			$errors = new \WP_Error('dual_check_invalid', __('That code is wrong or expired. Try again.', 'wp-dual-check'));
+			$errors = new \WP_Error('dual_check_invalid', __('That code is wrong or expired. Try again.', 'dual-check-2fa'));
 			$this->render_code_page($session, $errors);
 
 			return;
@@ -510,7 +510,7 @@ final class LoginFlow {
 					'row_id'       => (int) $row['id'],
 				)
 			);
-			$errors = new \WP_Error('dual_check_consume', __('Could not finish login. Request a new code from the login page.', 'wp-dual-check'));
+			$errors = new \WP_Error('dual_check_consume', __('Could not finish login. Request a new code from the login page.', 'dual-check-2fa'));
 			$this->render_code_page($session, $errors);
 
 			return;
@@ -566,24 +566,24 @@ final class LoginFlow {
 	 * @return void
 	 */
 	private function render_code_page(string $session, \WP_Error $errors): void {
-		$message = '<p class="message">' . esc_html__('Check your email, then enter the security code below.', 'wp-dual-check') . '</p>';
-		login_header(__('Security code', 'wp-dual-check'), $message, $errors);
+		$message = '<p class="message">' . esc_html__('Check your email, then enter the security code below.', 'dual-check-2fa') . '</p>';
+		login_header(__('Security code', 'dual-check-2fa'), $message, $errors);
 
-		$form_action = esc_url(site_url('wp-login.php', 'login_post'));
+		$form_action = site_url('wp-login.php', 'login_post');
 		?>
-		<form name="wpdualcheck" id="wpdualcheck" action="<?php echo $form_action; ?>" method="post" autocomplete="off">
-			<input type="hidden" name="action" value="<?php echo esc_attr(self::ACTION_CODE_PAGE); ?>" />
-			<?php wp_nonce_field('wp_dual_check_submit', 'wp_dual_check_nonce'); ?>
+		<form name="dc2fa_login" id="dc2fa_login" action="<?php echo esc_url($form_action); ?>" method="post" autocomplete="off">
+			<input type="hidden" name="action" value="<?php echo esc_attr(LoginFlow::ACTION_CODE_PAGE); ?>" />
+			<?php wp_nonce_field('dual_check_2fa_submit', 'dual_check_2fa_nonce'); ?>
 			<p>
-				<label for="<?php echo esc_attr(self::POST_CODE_KEY); ?>"><?php esc_html_e('Security code', 'wp-dual-check'); ?></label>
-				<input type="text" name="<?php echo esc_attr(self::POST_CODE_KEY); ?>" id="<?php echo esc_attr(self::POST_CODE_KEY); ?>" class="input" value="" size="20" autocomplete="one-time-code" required="required" />
+				<label for="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>"><?php esc_html_e('Security code', 'dual-check-2fa'); ?></label>
+				<input type="text" name="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>" id="<?php echo esc_attr(LoginFlow::POST_CODE_KEY); ?>" class="input" value="" size="20" autocomplete="one-time-code" required="required" />
 			</p>
 			<p class="submit">
-				<input type="submit" name="wp-submit" id="wp-submit" class="button button-primary button-large" value="<?php esc_attr_e('Continue', 'wp-dual-check'); ?>" />
+				<input type="submit" name="wp-submit" id="wp-submit" class="button button-primary button-large" value="<?php esc_attr_e('Continue', 'dual-check-2fa'); ?>" />
 			</p>
 		</form>
 		<p id="nav">
-			<a href="<?php echo esc_url(wp_login_url()); ?>"><?php esc_html_e('Back to log in', 'wp-dual-check'); ?></a>
+			<a href="<?php echo esc_url(wp_login_url()); ?>"><?php esc_html_e('Back to log in', 'dual-check-2fa'); ?></a>
 		</p>
 		<?php
 
@@ -600,10 +600,10 @@ final class LoginFlow {
 		self::clear_pending_login_cookies();
 		$errors = new \WP_Error(
 			'dual_check_session',
-			__('This sign-in step is no longer valid. That usually means the wait was too long, the link was opened twice after you already signed in, or the address was changed. Log in again with your username and password.', 'wp-dual-check')
+			__('This sign-in step is no longer valid. That usually means the wait was too long, the link was opened twice after you already signed in, or the address was changed. Log in again with your username and password.', 'dual-check-2fa')
 		);
-		login_header(__('Security code', 'wp-dual-check'), '', $errors);
-		echo '<p id="nav"><a href="' . esc_url(wp_login_url()) . '">' . esc_html__('Back to log in', 'wp-dual-check') . '</a></p>';
+		login_header(__('Security code', 'dual-check-2fa'), '', $errors);
+		echo '<p id="nav"><a href="' . esc_url(wp_login_url()) . '">' . esc_html__('Back to log in', 'dual-check-2fa') . '</a></p>';
 		login_footer();
 		exit;
 	}
@@ -620,7 +620,7 @@ final class LoginFlow {
 		if ($to === '') {
 			return new \WP_Error(
 				'dual_check_email',
-				__('No email address is available to send your code.', 'wp-dual-check')
+				__('No email address is available to send your code.', 'dual-check-2fa')
 			);
 		}
 
@@ -631,7 +631,7 @@ final class LoginFlow {
 		if (!$sent) {
 			return new \WP_Error(
 				'dual_check_mail',
-				__('Could not send the email with your code. Check your site mail settings.', 'wp-dual-check')
+				__('Could not send the email with your code. Check your site mail settings.', 'dual-check-2fa')
 			);
 		}
 

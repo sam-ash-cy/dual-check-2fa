@@ -1,8 +1,8 @@
 <?php
 
-namespace WP_DUAL_CHECK\delivery;
+namespace DualCheck2FA\delivery;
 
-use function WP_DUAL_CHECK\db\dual_check_settings;
+use function DualCheck2FA\db\dual_check_settings;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -13,7 +13,7 @@ if (!defined('ABSPATH')) {
  *
  * When “Use selectable mail provider” is off in settings, resolution is {@see Wp_Mail_Provider}.
  * When on, the chosen built-in (or wp_mail in the list) is constructed from the settings row.
- * The {@see 'wp_dual_check_mail_provider'} filter runs last for full override.
+ * The {@see 'dual_check_2fa_mail_provider'} filter runs last for full override.
  *
  * @return Mail_Provider_Interface
  */
@@ -30,7 +30,7 @@ function get_default_mail_provider(): Mail_Provider_Interface {
 	 *
 	 * @param Mail_Provider_Interface $provider Resolved from settings (default wp_mail path).
 	 */
-	$filtered = apply_filters('wp_dual_check_mail_provider', $provider);
+	$filtered = apply_filters('dual_check_2fa_mail_provider', $provider);
 
 	return $filtered instanceof Mail_Provider_Interface ? $filtered : $provider;
 }

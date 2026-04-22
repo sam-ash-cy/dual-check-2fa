@@ -1,8 +1,8 @@
 <?php
 
-namespace WP_DUAL_CHECK\auth;
+namespace DualCheck2FA\auth;
 
-use function WP_DUAL_CHECK\db\dual_check_settings;
+use function DualCheck2FA\db\dual_check_settings;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -13,9 +13,9 @@ if (!defined('ABSPATH')) {
  */
 final class Code_Request_Cooldown {
 
-	private const TRANSIENT_USER = 'wpdc_cd_u_';
+	private const TRANSIENT_USER = 'dc2fa_cd_u_';
 
-	private const TRANSIENT_IP_USER = 'wpdc_cd_iu_';
+	private const TRANSIENT_IP_USER = 'dc2fa_cd_iu_';
 
 	/**
 	 * Minimum seconds between new login codes for one user (from settings, clamped).
@@ -26,8 +26,8 @@ final class Code_Request_Cooldown {
 		$s = (int) (dual_check_settings()['code_resend_cooldown_seconds'] ?? 30);
 
 		return max(
-			\WP_DUAL_CHECK\admin\Settings_Page::CODE_RESEND_COOLDOWN_MIN,
-			min(\WP_DUAL_CHECK\admin\Settings_Page::CODE_RESEND_COOLDOWN_MAX, $s)
+			\DualCheck2FA\admin\Settings_Page::CODE_RESEND_COOLDOWN_MIN,
+			min(\DualCheck2FA\admin\Settings_Page::CODE_RESEND_COOLDOWN_MAX, $s)
 		);
 	}
 

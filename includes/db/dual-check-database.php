@@ -1,21 +1,21 @@
 <?php
 /**
- * @package WP_DUAL_CHECK
+ * @package DualCheck2FA
  */
 
-namespace WP_DUAL_CHECK\db;
+namespace DualCheck2FA\db;
 
 if (!defined('ABSPATH')) {
 	exit;
 }
 
-if (defined('WP_DUAL_CHECK_PATH')) {
-	require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-interface.php';
-	require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
-	require_once WP_DUAL_CHECK_PATH . 'includes/core/request-context.php';
+if (defined('DUAL_CHECK_2FA_PATH')) {
+	require_once DUAL_CHECK_2FA_PATH . 'includes/admin/settings-interface.php';
+	require_once DUAL_CHECK_2FA_PATH . 'includes/admin/settings-page.php';
+	require_once DUAL_CHECK_2FA_PATH . 'includes/core/request-context.php';
 }
 
-const WP_DUAL_CHECK_DB_SCHEMA_VERSION = '1.1.0';
+const DUAL_CHECK_2FA_DB_SCHEMA_VERSION = '1.1.0';
 
 /** Stored in dual_check.token_type for the wp-login second step. */
 const DUAL_CHECK_TOKEN_TYPE_LOGIN = 'login';
@@ -32,7 +32,7 @@ function get_table_name() {
 }
 
 /**
- * Emits {@see 'wp_dual_check_security_event'} and optionally writes a line to the PHP error log when {@see WP_DEBUG_LOG} is enabled.
+ * Emits {@see 'dual_check_2fa_security_event'} and optionally writes a line to the PHP error log when {@see WP_DEBUG_LOG} is enabled.
  *
  * @param array<string, mixed> $context
  */
@@ -43,9 +43,9 @@ function dual_check_log_security_event(string $event, array $context): void {
 	 * @param string               $event   Short event key (e.g. token_issued, token_verify_success).
 	 * @param array<string, mixed> $context Row id, user id, IP, truncated UA, etc.
 	 */
-	do_action('wp_dual_check_security_event', $event, $context);
+	do_action('dual_check_2fa_security_event', $event, $context);
 
-	$write = apply_filters('wp_dual_check_write_security_event_to_debug_log', null, $event, $context);
+	$write = apply_filters('dual_check_2fa_write_security_event_to_debug_log', null, $event, $context);
 	if ($write === null) {
 		$write = defined('WP_DEBUG') && WP_DEBUG && defined('WP_DEBUG_LOG') && WP_DEBUG_LOG;
 	}
@@ -57,28 +57,28 @@ function dual_check_log_security_event(string $event, array $context): void {
 		$context['user_agent'] = substr($context['user_agent'], 0, 160) . '…';
 	}
 
-	error_log('[WP Dual Check] ' . $event . ' ' . wp_json_encode($context, JSON_UNESCAPED_SLASHES));
+	error_log('[Dual Check 2FA] ' . $event . ' ' . wp_json_encode($context, JSON_UNESCAPED_SLASHES));
 }
 
 /**
- * Saved options from Settings → WP Dual Check (with defaults).
+ * Saved options from Settings → Dual Check 2FA (with defaults).
  *
  * @return array<string, mixed>
  */
 function dual_check_settings(): array {
 	$merged = wp_parse_args(
-		get_option(\WP_DUAL_CHECK\admin\Settings_Page::OPTION_NAME, array()),
-		\WP_DUAL_CHECK\admin\Settings_Page::defaults()
+		get_option(\DualCheck2FA\admin\Settings_Page::OPTION_NAME, array()),
+		\DualCheck2FA\admin\Settings_Page::defaults()
 	);
 
-	$clamped = \WP_DUAL_CHECK\admin\Settings_Page::clamp_numeric_settings($merged);
-	$caps    = \WP_DUAL_CHECK\admin\Settings_Page::normalize_capability_arrays($clamped);
+	$clamped = \DualCheck2FA\admin\Settings_Page::clamp_numeric_settings($merged);
+	$caps    = \DualCheck2FA\admin\Settings_Page::normalize_capability_arrays($clamped);
 
-	return \WP_DUAL_CHECK\admin\Settings_Page::normalize_email_settings($caps);
+	return \DualCheck2FA\admin\Settings_Page::normalize_email_settings($caps);
 }
 
 /**
- * Runs on activation and on `plugins_loaded` when the saved schema version is behind {@see WP_DUAL_CHECK_DB_SCHEMA_VERSION}.
+ * Runs on activation and on `plugins_loaded` when the saved schema version is behind {@see DUAL_CHECK_2FA_DB_SCHEMA_VERSION}.
  *
  * @global \wpdb $wpdb WordPress database abstraction object.
  * @return void
@@ -114,18 +114,18 @@ $dual_check_database_install = static function (): void {
 
 	dbDelta($sql);
 
-	update_option('wp_dual_check_db_version', WP_DUAL_CHECK_DB_SCHEMA_VERSION, false);
+	update_option('dual_check_2fa_db_version', DUAL_CHECK_2FA_DB_SCHEMA_VERSION, false);
 };
 
-if (defined('WP_DUAL_CHECK_FILE')) {
-	register_activation_hook(WP_DUAL_CHECK_FILE, $dual_check_database_install);
+if (defined('DUAL_CHECK_2FA_FILE')) {
+	register_activation_hook(DUAL_CHECK_2FA_FILE, $dual_check_database_install);
 }
 
 // Early priority so other plugin code can rely on the table existing when their hooks run.
 add_action(
 	'plugins_loaded',
 	static function () use ($dual_check_database_install): void {
-		if (get_option('wp_dual_check_db_version', '') !== WP_DUAL_CHECK_DB_SCHEMA_VERSION) {
+		if (get_option('dual_check_2fa_db_version', '') !== DUAL_CHECK_2FA_DB_SCHEMA_VERSION) {
 			$dual_check_database_install();
 		}
 	},
@@ -177,8 +177,8 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 	// Letters + numbers only so HTML email and esc_html() never change what the user must type.
 	$plain = wp_generate_password(
 		max(
-			\WP_DUAL_CHECK\admin\Settings_Page::CODE_LENGTH_MIN,
-			min(\WP_DUAL_CHECK\admin\Settings_Page::CODE_LENGTH_MAX, $length)
+			\DualCheck2FA\admin\Settings_Page::CODE_LENGTH_MIN,
+			min(\DualCheck2FA\admin\Settings_Page::CODE_LENGTH_MAX, $length)
 		),
 		false,
 		false
@@ -202,8 +202,8 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 
 	global $wpdb;
 
-	$ip = \WP_DUAL_CHECK\core\Request_Context::client_ip();
-	$ua = \WP_DUAL_CHECK\core\Request_Context::user_agent();
+	$ip = \DualCheck2FA\core\Request_Context::client_ip();
+	$ua = \DualCheck2FA\core\Request_Context::user_agent();
 
 	$table = $wpdb->prefix . 'dual_check';
 	$data  = array(
@@ -240,8 +240,8 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 		)
 	);
 
-	if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
-		\WP_DUAL_CHECK\Logging\Logger::debug(
+	if (class_exists(\DualCheck2FA\Logging\Logger::class)) {
+		\DualCheck2FA\Logging\Logger::debug(
 			'token_issued',
 			array(
 				'row_id'  => $row_id,
@@ -300,7 +300,7 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 		return false;
 	}
 
-	// Same upper bound as {@see \WP_DUAL_CHECK\auth\Code_Validator} (defense in depth).
+	// Same upper bound as {@see \DualCheck2FA\auth\Code_Validator} (defense in depth).
 	if (strlen($plain_token) > 128) {
 		return false;
 	}
@@ -316,8 +316,8 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 	$now      = current_time('mysql', true);
 	$settings = dual_check_settings();
 	$max      = (int) $settings['max_attempts'];
-	$v_ip     = \WP_DUAL_CHECK\core\Request_Context::client_ip();
-	$v_ua     = \WP_DUAL_CHECK\core\Request_Context::user_agent();
+	$v_ip     = \DualCheck2FA\core\Request_Context::client_ip();
+	$v_ua     = \DualCheck2FA\core\Request_Context::user_agent();
 
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
@@ -332,8 +332,8 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 	);
 
 	if (!is_array($row) || empty($row['id'])) {
-		if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
-			\WP_DUAL_CHECK\Logging\Logger::debug(
+		if (class_exists(\DualCheck2FA\Logging\Logger::class)) {
+			\DualCheck2FA\Logging\Logger::debug(
 				'token_verify_challenge_missing',
 				array(
 					'challenge_id' => $challenge_id,
@@ -365,8 +365,8 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 			)
 		);
 
-		if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
-			\WP_DUAL_CHECK\Logging\Logger::debug(
+		if (class_exists(\DualCheck2FA\Logging\Logger::class)) {
+			\DualCheck2FA\Logging\Logger::debug(
 				'token_verify_success',
 				array(
 					'row_id'  => $row_id,
@@ -396,8 +396,8 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 			'user_agent' => $v_ua,
 		)
 	);
-	if (class_exists(\WP_DUAL_CHECK\Logging\Logger::class)) {
-		\WP_DUAL_CHECK\Logging\Logger::debug(
+	if (class_exists(\DualCheck2FA\Logging\Logger::class)) {
+		\DualCheck2FA\Logging\Logger::debug(
 			'token_verify_failed',
 			array(
 				'row_id'  => $challenge_id,
