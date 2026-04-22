@@ -106,13 +106,15 @@ final class LoginFlow {
 	 * @return string 48-character lowercase hex, or empty string if missing/invalid.
 	 */
 	private static function parse_session_from_request(): string {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- public code-step cookie / query token; values are reduced to 48-char hex by preg_replace below.
 		$candidates = array();
 		if (isset($_COOKIE[ self::COOKIE_PENDING ]) && is_string($_COOKIE[ self::COOKIE_PENDING ])) {
-			$candidates[] = $_COOKIE[ self::COOKIE_PENDING ];
+			$candidates[] = wp_unslash($_COOKIE[ self::COOKIE_PENDING ]);
 		}
 		if (isset($_REQUEST[ self::QUERY_SESSION ])) {
 			$candidates[] = (string) wp_unslash($_REQUEST[ self::QUERY_SESSION ]);
 		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		foreach ($candidates as $raw) {
 			$hex = preg_replace('/[^a-f0-9]/i', '', $raw);
 			if (strlen($hex) === 48) {
@@ -334,9 +336,11 @@ final class LoginFlow {
 
 		Code_Request_Cooldown::mark_sent($user_id);
 
+		// phpcs:disable WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- `authenticate` after core validated wp-login credentials and nonce.
 		$session = self::new_session_token();
 		$remember = !empty($_POST['rememberme']);
 		$raw_redirect = isset($_POST['redirect_to']) ? wp_unslash((string) $_POST['redirect_to']) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		// Persist redirect target in the transient so the code step can finish with the same destination as wp-login.
 		$redirect_to  = wp_validate_redirect($raw_redirect, admin_url());
 
@@ -379,9 +383,11 @@ final class LoginFlow {
 	 * @return void
 	 */
 	public function run_separate_code_page(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- action slug gate on wp-login.php only.
 		if (!isset($_REQUEST['action']) || $_REQUEST['action'] !== self::ACTION_CODE_PAGE) {
 			return;
 		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		if (!self::site_requires_second_factor()) {
 			self::clear_pending_login_cookies();
@@ -430,7 +436,9 @@ final class LoginFlow {
 			return;
 		}
 
-		$method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : '';
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- HTTP method token; compared to GET/POST only.
+		$method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) wp_unslash($_SERVER['REQUEST_METHOD'])) : '';
+		// phpcs:ignore WordPress.Security.NonceVerification.Missing -- `dual_check_2fa_nonce` verified in {@see handle_code_page_post()}.
 		if ($method === 'POST' && isset($_POST['dual_check_2fa_nonce'])) {
 			$this->handle_code_page_post($session, $pending);
 
@@ -573,6 +581,7 @@ final class LoginFlow {
 		wp_clear_auth_cookie();
 		wp_set_current_user($user_id);
 		wp_set_auth_cookie($user_id, !empty($pending['remember']));
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WordPress hook.
 		do_action('wp_login', $user->user_login, $user);
 
 		Logger::debug(
@@ -586,6 +595,7 @@ final class LoginFlow {
 
 		$redirect_to = isset($pending['redirect_to']) ? (string) $pending['redirect_to'] : admin_url();
 		$redirect_to = wp_validate_redirect($redirect_to, admin_url());
+		// phpcs:ignore WordPress.NamingConventions.PrefixAllGlobals.NonPrefixedHooknameFound -- core WordPress hook.
 		$redirect_to = apply_filters('login_redirect', $redirect_to, '', $user);
 
 		wp_safe_redirect($redirect_to);

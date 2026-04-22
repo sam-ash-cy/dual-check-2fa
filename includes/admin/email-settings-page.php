@@ -229,10 +229,14 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	private function render_query_flash_notice(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only GET flash set by save handler after redirect.
 		if (!isset($_GET['dc2fa_msg'])) {
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended
 			return;
 		}
 		$key = sanitize_key((string) wp_unslash($_GET['dc2fa_msg']));
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
 		if ($key === 'test_ok') {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Test email sent.', 'dual-check-2fa') . '</p></div>';
 

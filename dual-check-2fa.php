@@ -14,8 +14,8 @@ if (!defined('ABSPATH')) exit;
 define('DUAL_CHECK_2FA_FILE', __FILE__);
 define('DUAL_CHECK_2FA_PATH', plugin_dir_path(__FILE__));
 
-$dc2fa_autoload = DUAL_CHECK_2FA_PATH . 'vendor/autoload.php';
-if (!is_readable($dc2fa_autoload)) {
+$dual_check_2fa_autoload = DUAL_CHECK_2FA_PATH . 'vendor/autoload.php';
+if (!is_readable($dual_check_2fa_autoload)) {
 	wp_die(
 		wp_kses_post(
 			__('Dual Check 2FA is missing Composer dependencies. Run <code>composer install</code> in the plugin directory, or reinstall the plugin from a release archive that includes the <code>vendor/</code> folder.', 'dual-check-2fa')
@@ -25,7 +25,7 @@ if (!is_readable($dc2fa_autoload)) {
 	);
 }
 
-require_once $dc2fa_autoload;
+require_once $dual_check_2fa_autoload;
 
 register_deactivation_hook(
 	DUAL_CHECK_2FA_FILE,

@@ -57,6 +57,7 @@ function dual_check_log_security_event(string $event, array $context): void {
 		$context['user_agent'] = substr($context['user_agent'], 0, 160) . '…';
 	}
 
+	// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- only when WP_DEBUG_LOG; intentional audit aid.
 	error_log('[Dual Check 2FA] ' . $event . ' ' . wp_json_encode($context, JSON_UNESCAPED_SLASHES));
 }
 
@@ -226,6 +227,7 @@ function add_dual_check_token($user_id, $token_type, $context = '', $expires_at 
 		$formats[]       = '%s';
 	}
 
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- custom table; direct insert is intentional.
 	$success = $wpdb->insert($table, $data, $formats);
 
 	if ($success === false) {
@@ -277,6 +279,7 @@ function invalidate_prior_login_challenges(int $user_id): void {
 	$table = get_table_name();
 	$now   = current_time('mysql', true);
 
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_table_name(); direct query on custom table.
 	$wpdb->query(
 		$wpdb->prepare(
 			"UPDATE {$table} SET consumed_at = %s WHERE user_id = %d AND token_type = %s AND consumed_at IS NULL",
@@ -285,6 +288,7 @@ function invalidate_prior_login_challenges(int $user_id): void {
 			DUAL_CHECK_TOKEN_TYPE_LOGIN
 		)
 	);
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 }
 
 /**
@@ -323,6 +327,7 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 	$v_ip     = \DualCheck2FA\core\Request_Context::client_ip();
 	$v_ua     = \DualCheck2FA\core\Request_Context::user_agent();
 
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_table_name(); direct query on custom table.
 	$row = $wpdb->get_row(
 		$wpdb->prepare(
 			"SELECT * FROM {$table} WHERE id = %d AND user_id = %d AND token_type = %s AND consumed_at IS NULL AND expires_at > %s AND attempts < %d",
@@ -334,6 +339,7 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 		),
 		ARRAY_A
 	);
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 	if (!is_array($row) || empty($row['id'])) {
 		if (class_exists(\DualCheck2FA\Logging\Logger::class)) {
@@ -351,6 +357,7 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 
 	if (!empty($row['token_hash']) && hash_equals((string) $row['token_hash'], $expected_hash)) {
 		$row_id = (int) $row['id'];
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_table_name(); direct update on custom table.
 		$wpdb->query(
 			$wpdb->prepare(
 				"UPDATE {$table} SET verify_ip_address = %s, verify_user_agent = %s WHERE id = %d",
@@ -359,6 +366,7 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 				$row_id
 			)
 		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 		dual_check_log_security_event(
 			'token_verify_success',
 			array(
@@ -382,6 +390,7 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 		return $row;
 	}
 
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_table_name(); direct update on custom table.
 	$wpdb->query(
 		$wpdb->prepare(
 			"UPDATE {$table} SET attempts = attempts + 1, verify_ip_address = %s, verify_user_agent = %s WHERE id = %d AND attempts < %d",
@@ -391,6 +400,7 @@ function verify_dual_check_token_by_row(int $challenge_id, int $user_id, string 
 			$max
 		)
 	);
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 	dual_check_log_security_event(
 		'token_verify_failed',
 		array(
@@ -429,6 +439,7 @@ function mark_dual_check_token_consumed(int $row_id): bool {
 	$table = get_table_name();
 	$now   = current_time('mysql', true);
 
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_table_name(); direct update on custom table.
 	$wpdb->query(
 		$wpdb->prepare(
 			"UPDATE {$table} SET consumed_at = %s WHERE id = %d AND consumed_at IS NULL",
@@ -436,6 +447,7 @@ function mark_dual_check_token_consumed(int $row_id): bool {
 			$row_id
 		)
 	);
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 	return $wpdb->rows_affected > 0;
 }

@@ -47,10 +47,12 @@ final class Security {
 	 * @return string Trimmed text field, or empty string if missing/invalid.
 	 */
 	public static function sanitise_code_from_request(string $post_key): string {
+		// phpcs:disable WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- wp-login / code-step handlers verify nonces before reading this POST key.
 		if (!isset($_POST[$post_key])) {
 			return '';
 		}
 		$raw = wp_unslash($_POST[$post_key]);
+		// phpcs:enable WordPress.Security.NonceVerification.Missing, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized
 		if (!is_string($raw)) {
 			return '';
 		}

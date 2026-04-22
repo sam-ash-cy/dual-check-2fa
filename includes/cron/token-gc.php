@@ -62,28 +62,30 @@ final class Token_Gc {
 			self::run_token_table_gc();
 		}
 
-		global $wpdb;
-		$trusted_table = get_trusted_devices_table_name();
-		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
-		$wpdb->query("DELETE FROM `{$trusted_table}` WHERE expires_at < UTC_TIMESTAMP()");
+	global $wpdb;
+	$trusted_table = get_trusted_devices_table_name();
+	// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_trusted_devices_table_name(); cron GC query on custom table.
+	$wpdb->query("DELETE FROM `{$trusted_table}` WHERE expires_at < UTC_TIMESTAMP()");
 
-		$activity_on = (bool) apply_filters(
-			'dual_check_2fa_login_activity_enabled',
-			!empty($settings['activity_enabled'])
+	$activity_on = (bool) apply_filters(
+		'dual_check_2fa_login_activity_enabled',
+		!empty($settings['activity_enabled'])
+	);
+	if ($activity_on) {
+		$days = (int) apply_filters(
+			'dual_check_2fa_login_activity_retention_days',
+			max(1, min(3650, (int) ($settings['activity_retention_days'] ?? 90)))
 		);
-		if ($activity_on) {
-			$days = (int) apply_filters(
-				'dual_check_2fa_login_activity_retention_days',
-				max(1, min(3650, (int) ($settings['activity_retention_days'] ?? 90)))
-			);
-			$events = get_events_table_name();
-			$wpdb->query(
-				$wpdb->prepare(
-					"DELETE FROM `{$events}` WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY)",
-					$days
-				)
-			);
-		}
+		$events = get_events_table_name();
+		// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_events_table_name(); cron GC query on custom table.
+		$wpdb->query(
+			$wpdb->prepare(
+				"DELETE FROM `{$events}` WHERE created_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY)",
+				$days
+			)
+		);
+		// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
+	}
 	}
 
 	/**
@@ -101,31 +103,32 @@ final class Token_Gc {
 
 		$table = get_table_name();
 
-		$sql = $wpdb->prepare(
-			"DELETE FROM `{$table}` WHERE id IN (
-				SELECT id FROM (
-					SELECT t.id
-					FROM `{$table}` t
-					WHERE (
-						(t.consumed_at IS NOT NULL AND t.consumed_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY))
-						OR (t.expires_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY))
-					)
-					AND t.id NOT IN (
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_table_name(); GC query on custom table.
+	$sql = $wpdb->prepare(
+		"DELETE FROM `{$table}` WHERE id IN (
+			SELECT id FROM (
+				SELECT t.id
+				FROM `{$table}` t
+				WHERE (
+					(t.consumed_at IS NOT NULL AND t.consumed_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY))
+					OR (t.expires_at < DATE_SUB(UTC_TIMESTAMP(), INTERVAL %d DAY))
+				)
+				AND t.id NOT IN (
+					SELECT id FROM (
 						SELECT id FROM (
-							SELECT id FROM (
-								SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn
-								FROM `{$table}`
-							) sub WHERE sub.rn <= %d
-						) inner_keep
-					)
-				) outer_sel
-			)",
-			$consumed_days,
-			$expired_days,
-			$keep_per_user
-		);
+							SELECT id, ROW_NUMBER() OVER (PARTITION BY user_id ORDER BY id DESC) AS rn
+							FROM `{$table}`
+						) sub WHERE sub.rn <= %d
+					) inner_keep
+				)
+			) outer_sel
+		)",
+		$consumed_days,
+		$expired_days,
+		$keep_per_user
+	);
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- dynamic table; placeholders bound above.
-		$wpdb->query($sql);
+	$wpdb->query($sql);
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 	}
 }

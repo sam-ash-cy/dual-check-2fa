@@ -63,22 +63,25 @@ final class Trusted_Device {
 			return false;
 		}
 
-		global $wpdb;
-		$table = get_trusted_devices_table_name();
-		$hash  = self::hash_token($plain);
-		$row   = $wpdb->get_row(
-			$wpdb->prepare(
-				"SELECT * FROM `{$table}` WHERE token_hash = %s AND user_id = %d AND expires_at > UTC_TIMESTAMP() LIMIT 1",
-				$hash,
-				$user_id
-			),
-			ARRAY_A
-		);
+	global $wpdb;
+	$table = get_trusted_devices_table_name();
+	$hash  = self::hash_token($plain);
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_trusted_devices_table_name(); direct query on custom table.
+	$row   = $wpdb->get_row(
+		$wpdb->prepare(
+			"SELECT * FROM `{$table}` WHERE token_hash = %s AND user_id = %d AND expires_at > UTC_TIMESTAMP() LIMIT 1",
+			$hash,
+			$user_id
+		),
+		ARRAY_A
+	);
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 
 		if (!is_array($row) || empty($row['id'])) {
 			return false;
 		}
 
+		// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- custom table; update last-used timestamp.
 		$wpdb->update(
 			$table,
 			array('last_used_at' => current_time('mysql', true)),
@@ -98,7 +101,8 @@ final class Trusted_Device {
 			return '';
 		}
 
-		$raw = preg_replace('/[^a-f0-9]/i', '', (string) $_COOKIE[ self::COOKIE_NAME ]);
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.MissingUnslash, WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- value is sanitised by preg_replace to hex characters only.
+	$raw = preg_replace('/[^a-f0-9]/i', '', (string) $_COOKIE[ self::COOKIE_NAME ]);
 		if (strlen($raw) !== 64) {
 			return '';
 		}
@@ -121,13 +125,14 @@ final class Trusted_Device {
 		$now   = current_time('mysql', true);
 		$exp   = gmdate('Y-m-d H:i:s', time() + ($days * DAY_IN_SECONDS));
 
-		global $wpdb;
-		$table = get_trusted_devices_table_name();
-		$wpdb->insert(
-			$table,
-			array(
-				'user_id'      => $user_id,
-				'token_hash'   => $hash,
+	global $wpdb;
+	$table = get_trusted_devices_table_name();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- custom table; direct insert is intentional.
+	$wpdb->insert(
+		$table,
+		array(
+			'user_id'      => $user_id,
+			'token_hash'   => $hash,
 				'created_at'   => $now,
 				'last_used_at' => $now,
 				'expires_at'   => $exp,
@@ -200,10 +205,11 @@ final class Trusted_Device {
 			return;
 		}
 
-		global $wpdb;
-		$table = get_trusted_devices_table_name();
-		$wpdb->delete($table, array('token_hash' => self::hash_token($plain)), array('%s'));
-		self::clear_trust_cookies();
+	global $wpdb;
+	$table = get_trusted_devices_table_name();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- custom table; direct delete.
+	$wpdb->delete($table, array('token_hash' => self::hash_token($plain)), array('%s'));
+	self::clear_trust_cookies();
 	}
 
 	/**
@@ -215,9 +221,10 @@ final class Trusted_Device {
 			return;
 		}
 
-		global $wpdb;
-		$table = get_trusted_devices_table_name();
-		$wpdb->delete($table, array('user_id' => $user_id), array('%d'));
+	global $wpdb;
+	$table = get_trusted_devices_table_name();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- custom table; direct delete.
+	$wpdb->delete($table, array('user_id' => $user_id), array('%d'));
 	}
 
 	/**
@@ -230,16 +237,17 @@ final class Trusted_Device {
 			return;
 		}
 
-		global $wpdb;
-		$table = get_trusted_devices_table_name();
-		$wpdb->delete(
-			$table,
-			array(
-				'id'      => $row_id,
-				'user_id' => $user_id,
-			),
-			array('%d', '%d')
-		);
+	global $wpdb;
+	$table = get_trusted_devices_table_name();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching -- custom table; direct delete.
+	$wpdb->delete(
+		$table,
+		array(
+			'id'      => $row_id,
+			'user_id' => $user_id,
+		),
+		array('%d', '%d')
+	);
 	}
 
 	/**

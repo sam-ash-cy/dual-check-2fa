@@ -139,7 +139,7 @@ final class Login_Activity_List_Table extends \WP_List_Table {
 
 		$this->screen->render_screen_reader_content('heading_list');
 		?>
-<table class="wp-list-table <?php echo implode(' ', $this->get_table_classes()); ?>">
+<table class="wp-list-table <?php echo esc_attr(implode(' ', $this->get_table_classes())); ?>">
 		<?php $this->print_table_description(); ?>
 	<thead>
 	<tr>
@@ -150,7 +150,7 @@ final class Login_Activity_List_Table extends \WP_List_Table {
 	<tbody id="the-list"
 		<?php
 		if ($singular) {
-			echo " data-wp-lists='list:$singular'";
+			printf(' data-wp-lists="%s"', esc_attr('list:' . $singular));
 		}
 		?>
 		>
@@ -196,6 +196,7 @@ final class Login_Activity_List_Table extends \WP_List_Table {
 			return;
 		}
 
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only filter GET args; screen requires {@see Security::can_access_login_activity()}.
 		$events = array(
 			''                => __('All events', 'dual-check-2fa'),
 			'token_issued'    => 'token_issued',
@@ -208,6 +209,7 @@ final class Login_Activity_List_Table extends \WP_List_Table {
 		$cur_event = isset($_GET['dc2fa_event']) ? sanitize_key((string) wp_unslash($_GET['dc2fa_event'])) : '';
 		$from      = isset($_GET['dc2fa_from']) ? sanitize_text_field((string) wp_unslash($_GET['dc2fa_from'])) : '';
 		$to        = isset($_GET['dc2fa_to']) ? sanitize_text_field((string) wp_unslash($_GET['dc2fa_to'])) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 
 		echo '<div class="alignleft actions">';
 		echo '<label class="screen-reader-text" for="dc2fa_event">' . esc_html__('Event', 'dual-check-2fa') . '</label>';
@@ -231,6 +233,7 @@ final class Login_Activity_List_Table extends \WP_List_Table {
 	 * @return void
 	 */
 	public function prepare_items(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- list table sort/filter GET args; {@see Login_Activity_Page::render_page()} requires capability.
 		$per_page = (int) $this->get_items_per_page(Login_Activity_Page::PER_PAGE_OPTION, 25);
 		if (!in_array($per_page, array(25, 50, 100), true)) {
 			$per_page = 25;
@@ -258,35 +261,44 @@ final class Login_Activity_List_Table extends \WP_List_Table {
 			$params[] = sanitize_key(wp_unslash($_GET['dc2fa_event']));
 		}
 
-		if (isset($_GET['dc2fa_from']) && is_string($_GET['dc2fa_from']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['dc2fa_from'])) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated by date-format regex on the line below.
+		$dc2fa_from = isset($_GET['dc2fa_from']) ? (string) wp_unslash($_GET['dc2fa_from']) : '';
+		if ($dc2fa_from !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dc2fa_from)) {
 			$where[]  = 'created_at >= %s';
-			$params[] = $_GET['dc2fa_from'] . ' 00:00:00';
+			$params[] = $dc2fa_from . ' 00:00:00';
 		}
-		if (isset($_GET['dc2fa_to']) && is_string($_GET['dc2fa_to']) && preg_match('/^\d{4}-\d{2}-\d{2}$/', $_GET['dc2fa_to'])) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- validated by date-format regex on the line below.
+		$dc2fa_to = isset($_GET['dc2fa_to']) ? (string) wp_unslash($_GET['dc2fa_to']) : '';
+		if ($dc2fa_to !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dc2fa_to)) {
 			$where[]  = 'created_at <= %s';
-			$params[] = $_GET['dc2fa_to'] . ' 23:59:59';
+			$params[] = $dc2fa_to . ' 23:59:59';
 		}
 
 		$where_sql = implode(' AND ', $where);
 		$sql_count = "SELECT COUNT(*) FROM `{$table}` WHERE {$where_sql}";
 		if ($params !== array()) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- WHERE built from %s placeholders above; table name from get_events_table_name().
 			$sql_count = $wpdb->prepare($sql_count, $params);
 		}
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $sql_count is result of $wpdb->prepare(); custom events table.
 		$total = (int) $wpdb->get_var($sql_count);
 
 		$paged = max(1, absint($_GET['paged'] ?? 1));
 		$offset = ($paged - 1) * $per_page;
 
-		$dir = isset($_GET['order']) && strtolower((string) wp_unslash($_GET['order'])) === 'asc' ? 'ASC' : 'DESC';
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- result restricted to ASC|DESC on the next line.
+		$order_raw = isset($_GET['order']) ? strtolower((string) wp_unslash($_GET['order'])) : '';
+		$dir       = ('asc' === $order_raw) ? 'ASC' : 'DESC';
 
 		$sql_items = "SELECT * FROM `{$table}` WHERE {$where_sql} ORDER BY created_at {$dir} LIMIT %d OFFSET %d";
 		$item_params = array_merge($params, array($per_page, $offset));
-		$sql_items    = $wpdb->prepare($sql_items, $item_params);
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- $dir is only ASC|DESC; remaining placeholders passed to prepare().
+		$sql_items = $wpdb->prepare($sql_items, $item_params);
 
-		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- $sql_items produced by $wpdb->prepare(); custom events table.
 		$rows = $wpdb->get_results($sql_items, ARRAY_A);
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		if (!is_array($rows)) {
 			$rows = array();
 		}

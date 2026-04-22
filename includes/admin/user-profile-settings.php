@@ -143,15 +143,17 @@ class User_Profile_Settings {
 			return;
 		}
 
-		global $wpdb;
-		$table = get_trusted_devices_table_name();
-		$rows  = $wpdb->get_results(
-			$wpdb->prepare(
-				"SELECT id, label, last_used_at, expires_at FROM `{$table}` WHERE user_id = %d ORDER BY id DESC",
-				(int) $user->ID
-			),
-			ARRAY_A
-		);
+	global $wpdb;
+	$table = get_trusted_devices_table_name();
+	// phpcs:disable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter -- table name from get_trusted_devices_table_name(); direct query on custom table is intentional.
+	$rows  = $wpdb->get_results(
+		$wpdb->prepare(
+			"SELECT id, label, last_used_at, expires_at FROM `{$table}` WHERE user_id = %d ORDER BY id DESC",
+			(int) $user->ID
+		),
+		ARRAY_A
+	);
+	// phpcs:enable WordPress.DB.PreparedSQL.InterpolatedNotPrepared, WordPress.DB.DirectDatabaseQuery.DirectQuery, WordPress.DB.DirectDatabaseQuery.NoCaching, PluginCheck.Security.DirectDB.UnescapedDBParameter
 		if (!is_array($rows)) {
 			$rows = array();
 		}

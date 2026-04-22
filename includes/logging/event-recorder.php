@@ -73,9 +73,10 @@ final class Event_Recorder {
 			return;
 		}
 
-		global $wpdb;
-		$table = get_events_table_name();
-		$wpdb->insert(
+	global $wpdb;
+	$table = get_events_table_name();
+	// phpcs:ignore WordPress.DB.DirectDatabaseQuery.DirectQuery -- custom events table; direct insert is intentional.
+	$wpdb->insert(
 			$table,
 			array(
 				'user_id'    => $user_id,

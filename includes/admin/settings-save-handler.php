@@ -38,6 +38,7 @@ final class Settings_Save_Handler {
 			wp_die(esc_html__('Invalid form submission.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 400));
 		}
 
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- verified via check_admin_referer(); values sanitized in Settings_Page::sanitize().
 		$input = wp_unslash($_POST[ $key ]);
 		$ctx   = isset($input['save_context']) ? sanitize_key((string) $input['save_context']) : 'main';
 

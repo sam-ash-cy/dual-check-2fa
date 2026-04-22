@@ -610,13 +610,13 @@ final class Settings_Page implements Admin_Settings_Page {
 				'dual-check-2fa'
 			) . '</p>';
 		} else {
-			printf(
-				'<p><label for="wpdc_mg_domain">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_mg_domain" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
-				esc_html__('Sending domain (e.g. mg.example.com)', 'dual-check-2fa'),
-				esc_attr($n),
-				esc_attr($dom_opt),
-				$domain_v
-			);
+		printf(
+			'<p><label for="wpdc_mg_domain">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_mg_domain" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
+			esc_html__('Sending domain (e.g. mg.example.com)', 'dual-check-2fa'),
+			esc_attr($n),
+			esc_attr($dom_opt),
+			esc_attr($domain_v)
+		);
 		}
 		if (Mail_Credentials::constant_is_set(Mail_Credentials::MAILGUN_REGION_CONSTANT)) {
 			echo '<p class="description">' . esc_html__(
@@ -708,13 +708,13 @@ final class Settings_Page implements Admin_Settings_Page {
 				'dual-check-2fa'
 			) . '</p>';
 		} else {
-			printf(
-				'<p><label for="wpdc_ses_region">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_ses_region" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
-				esc_html__('Region (e.g. us-east-1)', 'dual-check-2fa'),
-				esc_attr($n),
-				esc_attr($reg_opt),
-				$region
-			);
+		printf(
+			'<p><label for="wpdc_ses_region">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_ses_region" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
+			esc_html__('Region (e.g. us-east-1)', 'dual-check-2fa'),
+			esc_attr($n),
+			esc_attr($reg_opt),
+			esc_attr($region)
+		);
 		}
 		if (Mail_Credentials::constant_is_set($cs_c)) {
 			echo '<p class="description">' . esc_html__(
@@ -724,11 +724,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		} else {
 			printf(
 				'<p><label for="wpdc_ses_cs">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_ses_cs" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
-				esc_html__('Configuration set name (optional)', 'dual-check-2fa'),
-				esc_attr($n),
-				esc_attr($cs_opt),
-				$cs_val
-			);
+			esc_html__('Configuration set name (optional)', 'dual-check-2fa'),
+			esc_attr($n),
+			esc_attr($cs_opt),
+			esc_attr($cs_val)
+		);
 		}
 		echo '</div>';
 	}
@@ -1141,14 +1141,16 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 
 		echo '<div class="wrap"><h1>' . esc_html__('Dual Check 2FA', 'dual-check-2fa') . '</h1>';
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only GET flash set by save handler after redirect.
 		if (isset($_GET['dc2fa_test_sent'])) {
 			$st = sanitize_key((string) wp_unslash($_GET['dc2fa_test_sent']));
-			if ($st === 'ok') {
-				echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Test email sent.', 'dual-check-2fa') . '</p></div>';
-			} elseif ($st === 'fail') {
-				echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__('Test email could not be sent.', 'dual-check-2fa') . '</p></div>';
-			}
+		if ($st === 'ok') {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Test email sent.', 'dual-check-2fa') . '</p></div>';
+		} elseif ($st === 'fail') {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__('Test email could not be sent.', 'dual-check-2fa') . '</p></div>';
 		}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		Settings_Notices::render();
 		Settings_Save_Handler::render_form_open(Settings_Page::MENU_SLUG);
 		printf('<input type="hidden" name="%s[save_context]" value="main" />', esc_attr(Settings_Page::OPTION_NAME));
