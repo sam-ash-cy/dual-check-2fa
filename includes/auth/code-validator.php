@@ -1,9 +1,9 @@
 <?php
 
-namespace WP_DUAL_CHECK\auth;
+namespace DualCheck2FA\auth;
 
-use const WP_DUAL_CHECK\db\DUAL_CHECK_TOKEN_TYPE_LOGIN;
-use function WP_DUAL_CHECK\db\verify_dual_check_token_by_row;
+use const DualCheck2FA\db\DUAL_CHECK_TOKEN_TYPE_LOGIN;
+use function DualCheck2FA\db\verify_dual_check_token_by_row;
 
 if (!defined('ABSPATH')) {
 	exit;

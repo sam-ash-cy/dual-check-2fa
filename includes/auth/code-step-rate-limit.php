@@ -1,10 +1,10 @@
 <?php
 
-namespace WP_DUAL_CHECK\auth;
+namespace DualCheck2FA\auth;
 
-use WP_DUAL_CHECK\admin\Settings_Page;
-use WP_DUAL_CHECK\core\Request_Context;
-use function WP_DUAL_CHECK\db\dual_check_settings;
+use DualCheck2FA\admin\Settings_Page;
+use DualCheck2FA\core\Request_Context;
+use function DualCheck2FA\db\dual_check_settings;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -16,9 +16,9 @@ if (!defined('ABSPATH')) {
  */
 final class Code_Step_Rate_Limit {
 
-	private const COUNT_PREFIX = 'wpdc_cslc_';
+	private const COUNT_PREFIX = 'dc2fa_cslc_';
 
-	private const LOCK_PREFIX = 'wpdc_csll_';
+	private const LOCK_PREFIX = 'dc2fa_csll_';
 
 	/**
 	 * Whether IP + user binding (code-step lockout + resend cooldown key) is active.
@@ -34,7 +34,7 @@ final class Code_Step_Rate_Limit {
 		 *
 		 * @param bool $on Stored setting.
 		 */
-		return (bool) apply_filters('wp_dual_check_code_step_ip_binding_enabled', $on);
+		return (bool) apply_filters('dual_check_2fa_code_step_ip_binding_enabled', $on);
 	}
 
 	/**
@@ -114,7 +114,7 @@ final class Code_Step_Rate_Limit {
 		 * @param int $max     Clamped value from settings.
 		 * @param int $user_id User ID from the pending session.
 		 */
-		$max = (int) apply_filters('wp_dual_check_code_step_ip_max_fails', $max, $user_id);
+		$max = (int) apply_filters('dual_check_2fa_code_step_ip_max_fails', $max, $user_id);
 		if ($max < 1) {
 			return;
 		}
@@ -133,7 +133,7 @@ final class Code_Step_Rate_Limit {
 		 * @param int $lockout Clamped value from settings.
 		 * @param int $user_id User ID from the pending session.
 		 */
-		$lockout = (int) apply_filters('wp_dual_check_code_step_ip_lockout_seconds', $lockout, $user_id);
+		$lockout = (int) apply_filters('dual_check_2fa_code_step_ip_lockout_seconds', $lockout, $user_id);
 		if ($lockout < 1) {
 			return;
 		}

@@ -1,7 +1,7 @@
 <?php
 
 
-namespace WP_DUAL_CHECK\integrations\graphql;
+namespace DualCheck2FA\integrations\graphql;
 
 if (!defined('ABSPATH')) {
 	exit;

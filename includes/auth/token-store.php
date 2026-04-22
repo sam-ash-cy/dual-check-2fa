@@ -1,10 +1,10 @@
 <?php
 
-namespace WP_DUAL_CHECK\auth;
+namespace DualCheck2FA\auth;
 
-use const WP_DUAL_CHECK\db\DUAL_CHECK_TOKEN_TYPE_LOGIN;
-use function WP_DUAL_CHECK\db\add_dual_check_token;
-use function WP_DUAL_CHECK\db\mark_dual_check_token_consumed;
+use const DualCheck2FA\db\DUAL_CHECK_TOKEN_TYPE_LOGIN;
+use function DualCheck2FA\db\add_dual_check_token;
+use function DualCheck2FA\db\mark_dual_check_token_consumed;
 
 if (!defined('ABSPATH')) {
 	exit;

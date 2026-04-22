@@ -1,6 +1,6 @@
 <?php
 
-namespace WP_DUAL_CHECK\core;
+namespace DualCheck2FA\core;
 
 if (!defined('ABSPATH')) {
 	exit;

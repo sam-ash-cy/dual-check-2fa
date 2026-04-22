@@ -1,6 +1,6 @@
 <?php
 
-namespace WP_DUAL_CHECK\core;
+namespace DualCheck2FA\core;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -27,27 +27,27 @@ class PluginLoad {
 	 * @return void
 	 */
 	private function load_dependencies(): void {
-		require_once WP_DUAL_CHECK_PATH . 'includes/core/security.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/core/plugin.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/core/loader.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/delivery/delivery-options/mail-provider-interface.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/delivery/delivery-options/wp-mail-provider.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/delivery/registry.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-generator.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-validator.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/auth/token-store.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/logging/logger.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/auth/two-factor-service.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-interface.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-save-handler.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/admin/settings-page.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-step-rate-limit.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/auth/code-request-cooldown.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/admin/permissions-settings-page.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/admin/email-settings-page.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/admin/user-profile-settings.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/email/login-email-builder.php';
-		require_once WP_DUAL_CHECK_PATH . 'includes/integrations/login-flow.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/core/security.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/core/plugin.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/core/loader.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/delivery-options/mail-provider-interface.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/delivery-options/wp-mail-provider.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/registry.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/auth/code-generator.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/auth/code-validator.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/auth/token-store.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/logging/logger.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/auth/two-factor-service.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/admin/settings-interface.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/admin/settings-save-handler.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/admin/settings-page.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/auth/code-step-rate-limit.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/auth/code-request-cooldown.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/admin/permissions-settings-page.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/admin/email-settings-page.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/admin/user-profile-settings.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/email/login-email-builder.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/integrations/login-flow.php';
 	}
 
 	/**
@@ -57,15 +57,15 @@ class PluginLoad {
 	 */
 	private function init_hooks(): void {
 
-		(new \WP_DUAL_CHECK\integrations\LoginFlow())->register();
+		(new \DualCheck2FA\integrations\LoginFlow())->register();
 
-		(new \WP_DUAL_CHECK\admin\Settings_Save_Handler())->register();
+		(new \DualCheck2FA\admin\Settings_Save_Handler())->register();
 
 		if (is_admin()) {
-			(new \WP_DUAL_CHECK\admin\Settings_Page())->register();
-			(new \WP_DUAL_CHECK\admin\Permissions_Settings_Page())->register();
-			(new \WP_DUAL_CHECK\admin\Email_Settings_Page())->register();
-			(new \WP_DUAL_CHECK\admin\User_Profile_Settings())->register();
+			(new \DualCheck2FA\admin\Settings_Page())->register();
+			(new \DualCheck2FA\admin\Permissions_Settings_Page())->register();
+			(new \DualCheck2FA\admin\Email_Settings_Page())->register();
+			(new \DualCheck2FA\admin\User_Profile_Settings())->register();
 		}
 	}
 }

@@ -1,6 +1,6 @@
 <?php
 
-namespace WP_DUAL_CHECK\delivery;
+namespace DualCheck2FA\delivery;
 
 if (!defined('ABSPATH')) {
 	exit;

@@ -1,6 +1,6 @@
 <?php
 
-namespace WP_DUAL_CHECK\admin;
+namespace DualCheck2FA\admin;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -11,7 +11,7 @@ if (!defined('ABSPATH')) {
  */
 class User_Profile_Settings {
 
-	public const META_KEY = 'wp_dual_check_2fa_email';
+	public const META_KEY = 'dual_check_2fa_email';
 
 	/**
 	 * Hooks profile display and save handlers.
@@ -77,15 +77,15 @@ class User_Profile_Settings {
 		$value = get_user_meta($user->ID, self::META_KEY, true);
 		$value = is_string($value) ? $value : '';
 
-		echo '<h2>' . esc_html__('Dual-check email', 'wp-dual-check') . '</h2>';
+		echo '<h2>' . esc_html__('Dual-check email', 'dual-check-2fa') . '</h2>';
 		echo '<table class="form-table" role="presentation"><tr>';
-		echo '<th scope="row"><label for="dual_check_2fa_email">' . esc_html__('Email for security codes', 'wp-dual-check') . '</label></th>';
+		echo '<th scope="row"><label for="dual_check_2fa_email">' . esc_html__('Email for security codes', 'dual-check-2fa') . '</label></th>';
 		echo '<td>';
 		printf(
 			'<input type="email" class="regular-text" name="dual_check_2fa_email" id="dual_check_2fa_email" value="%s" autocomplete="email" />',
 			esc_attr($value)
 		);
-		echo '<p class="description">' . esc_html__('Leave blank to use your normal account email.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('Leave blank to use your normal account email.', 'dual-check-2fa') . '</p>';
 		echo '</td></tr></table>';
 	}
 

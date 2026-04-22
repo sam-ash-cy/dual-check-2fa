@@ -1,6 +1,6 @@
 # Security Policy
 
-This document describes how we handle security issues for **WP Dual Check** (WordPress plugin).
+This document describes how we handle security issues for **Dual Check 2FA** (WordPress plugin).
 
 ## Reporting a Vulnerability
 
@@ -14,7 +14,7 @@ This document describes how we handle security issues for **WP Dual Check** (Wor
 
 ### Alternative: email
 
-If private advisories are not available, contact the maintainer **directly by email** with subject line `[SECURITY] WP Dual Check` and the same detail you would put in an advisory. 
+If private advisories are not available, contact the maintainer **directly by email** with subject line `[SECURITY] Dual Check 2FA` and the same detail you would put in an advisory. 
 
 Contact email: ash75049@gmail.com
 
@@ -39,4 +39,4 @@ Contact email: ash75049@gmail.com
 - Server or host misconfiguration (e.g. exposed upload directories, PHP version past EOL).
 - Social engineering or stolen administrator credentials.
 
-Thank you for helping keep WP Dual Check users safe.
+Thank you for helping keep Dual Check 2FA users safe.

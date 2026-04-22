@@ -1,24 +1,24 @@
 <?php
 
-namespace WP_DUAL_CHECK\admin;
+namespace DualCheck2FA\admin;
 
-use WP_DUAL_CHECK\core\Security;
+use DualCheck2FA\core\Security;
 
 if (!defined('ABSPATH')) {
 	exit;
 }
 
 /**
- * General WP Dual Check settings: option registration, sanitization, and field callbacks.
+ * General Dual Check 2FA settings: option registration, sanitization, and field callbacks.
  */
 final class Settings_Page implements Admin_Settings_Page {
 
-	public const OPTION_NAME = 'wp_dual_check_settings';
+	public const OPTION_NAME = 'dual_check_2fa_settings';
 
 	/** Settings API group slug (used with {@see register_setting()} and options.php capability filter). */
-	public const OPTION_GROUP = 'wp_dual_check_settings_group';
+	public const OPTION_GROUP = 'dual_check_2fa_settings_group';
 
-	public const MENU_SLUG = 'wp-dual-check';
+	public const MENU_SLUG = 'dual-check-2fa';
 
 	public const CODE_LIFETIME_MIN = 5;
 
@@ -61,8 +61,8 @@ final class Settings_Page implements Admin_Settings_Page {
 	 */
 	public function add_main_menu(): void {
 		add_menu_page(
-			__('WP Dual Check', 'wp-dual-check'),
-			__('WP Dual Check', 'wp-dual-check'),
+			__('Dual Check 2FA', 'dual-check-2fa'),
+			__('Dual Check 2FA', 'dual-check-2fa'),
 			Security::menu_capability_for_main(),
 			self::MENU_SLUG,
 			array($this, 'render_page'),
@@ -71,8 +71,8 @@ final class Settings_Page implements Admin_Settings_Page {
 		);
 		add_submenu_page(
 			self::MENU_SLUG,
-			__('General Settings', 'wp-dual-check'),
-			__('General Settings', 'wp-dual-check'),
+			__('General Settings', 'dual-check-2fa'),
+			__('General Settings', 'dual-check-2fa'),
 			Security::menu_capability_for_main(),
 			self::MENU_SLUG,
 			array($this, 'render_page')
@@ -103,120 +103,120 @@ final class Settings_Page implements Admin_Settings_Page {
 		add_filter('option_page_capability_' . self::OPTION_GROUP, array(self::class, 'options_php_capability'));
 
 		add_settings_section(
-			'wp_dual_check_policy',
-			__('Login policy and management', 'wp-dual-check'),
+			'dual_check_2fa_policy',
+			__('Login policy and management', 'dual-check-2fa'),
 			'',
 			self::MENU_SLUG
 		);
 
 		add_settings_field(
 			'require_2fa_all_users',
-			__('Require dual-check for everyone', 'wp-dual-check'),
+			__('Require dual-check for everyone', 'dual-check-2fa'),
 			array($this, 'field_require_2fa_all_users'),
 			self::MENU_SLUG,
-			'wp_dual_check_policy'
+			'dual_check_2fa_policy'
 		);
 
 		add_settings_field(
 			'allow_profile_2fa_email',
-			__('2FA delivery email on profile', 'wp-dual-check'),
+			__('2FA delivery email on profile', 'dual-check-2fa'),
 			array($this, 'field_allow_profile_2fa_email'),
 			self::MENU_SLUG,
-			'wp_dual_check_policy'
+			'dual_check_2fa_policy'
 		);
 
 		add_settings_section(
-			'wp_dual_check_main',
-			__('General', 'wp-dual-check'),
+			'dual_check_2fa_main',
+			__('General', 'dual-check-2fa'),
 			'',
 			self::MENU_SLUG
 		);
 
 		add_settings_field(
 			'code_lifetime_minutes',
-			__('Code expiration (minutes)', 'wp-dual-check'),
+			__('Code expiration (minutes)', 'dual-check-2fa'),
 			array($this, 'field_code_lifetime'),
 			self::MENU_SLUG,
-			'wp_dual_check_main'
+			'dual_check_2fa_main'
 		);
 
 		add_settings_field(
 			'max_attempts',
-			__('Max verification attempts', 'wp-dual-check'),
+			__('Max verification attempts', 'dual-check-2fa'),
 			array($this, 'field_max_attempts'),
 			self::MENU_SLUG,
-			'wp_dual_check_main'
+			'dual_check_2fa_main'
 		);
 
 		add_settings_field(
 			'code_length',
-			__('Code length', 'wp-dual-check'),
+			__('Code length', 'dual-check-2fa'),
 			array($this, 'field_code_length'),
 			self::MENU_SLUG,
-			'wp_dual_check_main'
+			'dual_check_2fa_main'
 		);
 
 		add_settings_field(
 			'code_resend_cooldown_seconds',
-			__('Minimum time between new login codes (seconds)', 'wp-dual-check'),
+			__('Minimum time between new login codes (seconds)', 'dual-check-2fa'),
 			array($this, 'field_code_resend_cooldown'),
 			self::MENU_SLUG,
-			'wp_dual_check_main'
+			'dual_check_2fa_main'
 		);
 
 		add_settings_section(
-			'wp_dual_check_code_step_ip',
-			__('Code step & IP binding', 'wp-dual-check'),
+			'dual_check_2fa_code_step_ip',
+			__('Code step & IP binding', 'dual-check-2fa'),
 			array($this, 'section_code_step_ip'),
 			self::MENU_SLUG
 		);
 
 		add_settings_field(
 			'code_step_ip_rate_limit_enabled',
-			__('IP + user binding', 'wp-dual-check'),
+			__('IP + user binding', 'dual-check-2fa'),
 			array($this, 'field_code_step_ip_rate_limit_enabled'),
 			self::MENU_SLUG,
-			'wp_dual_check_code_step_ip'
+			'dual_check_2fa_code_step_ip'
 		);
 
 		add_settings_field(
 			'code_step_ip_max_fails',
-			__('Wrong codes before lockout', 'wp-dual-check'),
+			__('Wrong codes before lockout', 'dual-check-2fa'),
 			array($this, 'field_code_step_ip_max_fails'),
 			self::MENU_SLUG,
-			'wp_dual_check_code_step_ip'
+			'dual_check_2fa_code_step_ip'
 		);
 
 		add_settings_field(
 			'code_step_ip_lockout_seconds',
-			__('Lockout duration (seconds)', 'wp-dual-check'),
+			__('Lockout duration (seconds)', 'dual-check-2fa'),
 			array($this, 'field_code_step_ip_lockout_seconds'),
 			self::MENU_SLUG,
-			'wp_dual_check_code_step_ip'
+			'dual_check_2fa_code_step_ip'
 		);
 
 		add_settings_field(
 			'email_use_custom_template',
-			__('Use custom email template', 'wp-dual-check'),
+			__('Use custom email template', 'dual-check-2fa'),
 			array($this, 'field_email_use_custom_template'),
 			self::MENU_SLUG,
-			'wp_dual_check_main'
+			'dual_check_2fa_main'
 		);
 
 
 		add_settings_section(
-			'wp_dual_check_debugging',
-			__('Debugging', 'wp-dual-check'),
+			'dual_check_2fa_debugging',
+			__('Debugging', 'dual-check-2fa'),
 			'',
 			self::MENU_SLUG
 		);
 
 		add_settings_field(
 			'debug_logging',
-			__('Debug logging', 'wp-dual-check'),
+			__('Debug logging', 'dual-check-2fa'),
 			array($this, 'field_debug_logging'),
 			self::MENU_SLUG,
-			'wp_dual_check_debugging'
+			'dual_check_2fa_debugging'
 		);
 	}
 
@@ -256,8 +256,8 @@ final class Settings_Page implements Admin_Settings_Page {
 			$trial = self::normalize_capability_arrays($trial);
 			if (!Security::current_user_passes_main_context_with_settings($trial)) {
 				Settings_Notices::error(
-					'wpdc_cap_lockout',
-					__('Those capability settings were not saved because your account would no longer match “Main settings & this screen”.', 'wp-dual-check')
+					'dc2fa_cap_lockout',
+					__('Those capability settings were not saved because your account would no longer match “Main settings & this screen”.', 'dual-check-2fa')
 				);
 
 				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
@@ -332,10 +332,10 @@ final class Settings_Page implements Admin_Settings_Page {
 		$v    = (int) $opts['code_lifetime_minutes'];
 		printf(
 			'<input type="number" name="%1$s[code_lifetime_minutes]" value="%2$d" min="%3$d" max="%4$d" class="small-text" />',
-			esc_attr(self::OPTION_NAME),
-			$v,
-			self::CODE_LIFETIME_MIN,
-			self::CODE_LIFETIME_MAX
+			esc_attr(Settings_Page::OPTION_NAME),
+			absint($v),
+			absint(self::CODE_LIFETIME_MIN),
+			absint(self::CODE_LIFETIME_MAX)
 		);
 	}
 
@@ -349,10 +349,10 @@ final class Settings_Page implements Admin_Settings_Page {
 		$v    = (int) $opts['max_attempts'];
 		printf(
 			'<input type="number" name="%1$s[max_attempts]" value="%2$d" min="%3$d" max="%4$d" class="small-text" />',
-			esc_attr(self::OPTION_NAME),
-			$v,
-			self::MAX_ATTEMPTS_MIN,
-			self::MAX_ATTEMPTS_MAX
+			esc_attr(Settings_Page::OPTION_NAME),
+			absint($v),
+			absint(self::MAX_ATTEMPTS_MIN),
+			absint(self::MAX_ATTEMPTS_MAX)
 		);
 	}
 
@@ -366,10 +366,10 @@ final class Settings_Page implements Admin_Settings_Page {
 		$v    = (int) $opts['code_length'];
 		printf(
 			'<input type="number" name="%1$s[code_length]" value="%2$d" min="%3$d" max="%4$d" class="small-text" />',
-			esc_attr(self::OPTION_NAME),
-			$v,
-			self::CODE_LENGTH_MIN,
-			self::CODE_LENGTH_MAX
+			esc_attr(Settings_Page::OPTION_NAME),
+			absint($v),
+			absint(self::CODE_LENGTH_MIN),
+			absint(self::CODE_LENGTH_MAX)
 		);
 	}
 
@@ -383,12 +383,12 @@ final class Settings_Page implements Admin_Settings_Page {
 		$v    = (int) $opts['code_resend_cooldown_seconds'];
 		printf(
 			'<input type="number" name="%1$s[code_resend_cooldown_seconds]" value="%2$d" min="%3$d" max="%4$d" class="small-text" />',
-			esc_attr(self::OPTION_NAME),
-			$v,
-			self::CODE_RESEND_COOLDOWN_MIN,
-			self::CODE_RESEND_COOLDOWN_MAX
+			esc_attr(Settings_Page::OPTION_NAME),
+			absint($v),
+			absint(self::CODE_RESEND_COOLDOWN_MIN),
+			absint(self::CODE_RESEND_COOLDOWN_MAX)
 		);
-		echo '<p class="description">' . esc_html__('When IP binding is off: applies per WordPress user only. When IP binding is on: the same interval is tracked per IP address and user together, so one client cannot burn codes for many accounts.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('When IP binding is off: applies per WordPress user only. When IP binding is on: the same interval is tracked per IP address and user together, so one client cannot burn codes for many accounts.', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
@@ -397,7 +397,7 @@ final class Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	public function section_code_step_ip(): void {
-		echo '<p class="description">' . esc_html__('When enabled, wrong security codes are counted per IP address and user. After too many failures, that client cannot submit codes or request a new email for the lockout period. The “minimum time between new login codes” setting above uses the same IP + user key instead of user only.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('When enabled, wrong security codes are counted per IP address and user. After too many failures, that client cannot submit codes or request a new email for the lockout period. The “minimum time between new login codes” setting above uses the same IP + user key instead of user only.', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
@@ -411,10 +411,10 @@ final class Settings_Page implements Admin_Settings_Page {
 		$n       = self::OPTION_NAME;
 		printf('<input type="hidden" name="%s[code_step_ip_rate_limit_enabled]" value="0" />', esc_attr($n));
 		printf(
-			'<label for="wpdc_code_step_ip_binding"><input type="checkbox" id="wpdc_code_step_ip_binding" name="%1$s[code_step_ip_rate_limit_enabled]" value="1" %2$s /> %3$s</label>',
+			'<label for="dc2fa_code_step_ip_binding"><input type="checkbox" id="dc2fa_code_step_ip_binding" name="%1$s[code_step_ip_rate_limit_enabled]" value="1" %2$s /> %3$s</label>',
 			esc_attr($n),
 			checked($checked, true, false),
-			esc_html__('Limit the code step and resend cooldown by IP + user', 'wp-dual-check')
+			esc_html__('Limit the code step and resend cooldown by IP + user', 'dual-check-2fa')
 		);
 	}
 
@@ -428,12 +428,12 @@ final class Settings_Page implements Admin_Settings_Page {
 		$v    = (int) $opts['code_step_ip_max_fails'];
 		printf(
 			'<input type="number" name="%1$s[code_step_ip_max_fails]" value="%2$d" min="%3$d" max="%4$d" class="small-text" />',
-			esc_attr(self::OPTION_NAME),
-			$v,
-			self::CODE_STEP_IP_MAX_FAILS_MIN,
-			self::CODE_STEP_IP_MAX_FAILS_MAX
+			esc_attr(Settings_Page::OPTION_NAME),
+			absint($v),
+			absint(self::CODE_STEP_IP_MAX_FAILS_MIN),
+			absint(self::CODE_STEP_IP_MAX_FAILS_MAX)
 		);
-		echo '<p class="description">' . esc_html__('Only used when IP binding is on. Separate from “max verification attempts” on each issued code.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('Only used when IP binding is on. Separate from “max verification attempts” on each issued code.', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
@@ -446,12 +446,12 @@ final class Settings_Page implements Admin_Settings_Page {
 		$v    = (int) $opts['code_step_ip_lockout_seconds'];
 		printf(
 			'<input type="number" name="%1$s[code_step_ip_lockout_seconds]" value="%2$d" min="%3$d" max="%4$d" class="small-text" />',
-			esc_attr(self::OPTION_NAME),
-			$v,
-			self::CODE_STEP_IP_LOCKOUT_MIN,
-			self::CODE_STEP_IP_LOCKOUT_MAX
+			esc_attr(Settings_Page::OPTION_NAME),
+			absint($v),
+			absint(self::CODE_STEP_IP_LOCKOUT_MIN),
+			absint(self::CODE_STEP_IP_LOCKOUT_MAX)
 		);
-		echo '<p class="description">' . esc_html__('How long the IP + user pair is blocked from the code step and from requesting another login code.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('How long the IP + user pair is blocked from the code step and from requesting another login code.', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
@@ -465,13 +465,13 @@ final class Settings_Page implements Admin_Settings_Page {
 		$n    = self::OPTION_NAME;
 		printf('<input type="hidden" name="%s[debug_logging]" value="0" />', esc_attr($n));
 		printf(
-			'<label for="wpdc_debug_logging"><input type="checkbox" id="wpdc_debug_logging" name="%1$s[debug_logging]" value="1" %2$s /> %3$s</label>',
+			'<label for="dc2fa_debug_logging"><input type="checkbox" id="dc2fa_debug_logging" name="%1$s[debug_logging]" value="1" %2$s /> %3$s</label>',
 			esc_attr($n),
 			checked($on, true, false),
-			esc_html__('Write debug lines to the uploads log file', 'wp-dual-check')
+			esc_html__('Write debug lines to the uploads log file', 'dual-check-2fa')
 		);
-		$dir = \WP_DUAL_CHECK\Logging\Logger::log_directory();
-		echo '<p class="description">' . esc_html__('File:', 'wp-dual-check') . ' <code>' . esc_html($dir !== '' ? trailingslashit($dir) . 'debug.log' : '') . '</code></p>';
+		$dir = \DualCheck2FA\Logging\Logger::log_directory();
+		echo '<p class="description">' . esc_html__('File:', 'dual-check-2fa') . ' <code>' . esc_html($dir !== '' ? trailingslashit($dir) . 'debug.log' : '') . '</code></p>';
 	}
 
 	/**
@@ -485,12 +485,12 @@ final class Settings_Page implements Admin_Settings_Page {
 		$n    = self::OPTION_NAME;
 		printf('<input type="hidden" name="%s[email_use_custom_template]" value="0" />', esc_attr($n));
 		printf(
-			'<label for="wpdc_use_custom_email"><input type="checkbox" id="wpdc_use_custom_email" name="%1$s[email_use_custom_template]" value="1" %2$s aria-describedby="wpdc_use_custom_email_desc" /> %3$s</label>',
+			'<label for="dc2fa_use_custom_email"><input type="checkbox" id="dc2fa_use_custom_email" name="%1$s[email_use_custom_template]" value="1" %2$s aria-describedby="dc2fa_use_custom_email_desc" /> %3$s</label>',
 			esc_attr($n),
 			checked($on, true, false),
-			esc_html__('Use custom email template', 'wp-dual-check')
+			esc_html__('Use custom email template', 'dual-check-2fa')
 		);
-		echo '<p class="description" id="wpdc_use_custom_email_desc">' . esc_html__('When unchecked, login emails use only the bundled layout and colours; the Login Email Template screen is hidden and saved custom content is not applied.', 'wp-dual-check') . '</p>';
+		echo '<p class="description" id="dc2fa_use_custom_email_desc">' . esc_html__('When unchecked, login emails use only the bundled layout and colours; the Login Email Template screen is hidden and saved custom content is not applied.', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
@@ -503,9 +503,9 @@ final class Settings_Page implements Admin_Settings_Page {
 		$checked = !empty($opts['allow_profile_2fa_email']);
 		printf(
 			'<label><input type="checkbox" name="%1$s[allow_profile_2fa_email]" value="1" %2$s /> %3$s</label>',
-			esc_attr(self::OPTION_NAME),
+			esc_attr(Settings_Page::OPTION_NAME),
 			checked($checked, true, false),
-			esc_html__('Let users set a separate email for codes on their profile.', 'wp-dual-check')
+			esc_html__('Let users set a separate email for codes on their profile.', 'dual-check-2fa')
 		);
 	}
 
@@ -519,11 +519,11 @@ final class Settings_Page implements Admin_Settings_Page {
 		$checked = !empty($opts['require_2fa_all_users']);
 		printf(
 			'<label><input type="checkbox" name="%1$s[require_2fa_all_users]" value="1" %2$s /> %3$s</label>',
-			esc_attr(self::OPTION_NAME),
+			esc_attr(Settings_Page::OPTION_NAME),
 			checked($checked, true, false),
-			esc_html__('Enable Two Factor Authentication for all users.', 'wp-dual-check')
+			esc_html__('Enable Two Factor Authentication for all users.', 'dual-check-2fa')
 		);
-		echo '<p class="description">' . esc_html__('This is off by default to prevent locking out users. When enabled, all users will be required to complete a second step after logging in initially.', 'wp-dual-check') . '</p>';
+		echo '<p class="description">' . esc_html__('This is off by default to prevent locking out users. When enabled, all users will be required to complete a second step after logging in initially.', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
@@ -533,18 +533,18 @@ final class Settings_Page implements Admin_Settings_Page {
 	 */
 	public function render_page(): void {
 		if (!is_user_logged_in()) {
-			wp_die(esc_html__('You must be logged in.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
+			wp_die(esc_html__('You must be logged in.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 403));
 		}
 		if (!Security::can_access_main_settings()) {
-			wp_die(esc_html__('You do not have permission to access this page.', 'wp-dual-check'), esc_html__('Error', 'wp-dual-check'), array('response' => 403));
+			wp_die(esc_html__('You do not have permission to access this page.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 403));
 		}
 
-		echo '<div class="wrap"><h1>' . esc_html__('WP Dual Check', 'wp-dual-check') . '</h1>';
+		echo '<div class="wrap"><h1>' . esc_html__('Dual Check 2FA', 'dual-check-2fa') . '</h1>';
 		Settings_Notices::render();
-		Settings_Save_Handler::render_form_open(self::MENU_SLUG);
-		printf('<input type="hidden" name="%s[save_context]" value="main" />', esc_attr(self::OPTION_NAME));
-		do_settings_sections(self::MENU_SLUG);
-		submit_button(__('Save changes', 'wp-dual-check'));
+		Settings_Save_Handler::render_form_open(Settings_Page::MENU_SLUG);
+		printf('<input type="hidden" name="%s[save_context]" value="main" />', esc_attr(Settings_Page::OPTION_NAME));
+		do_settings_sections(Settings_Page::MENU_SLUG);
+		submit_button(__('Save changes', 'dual-check-2fa'));
 		echo '</form></div>';
 	}
 

@@ -1,6 +1,6 @@
 <?php
 
-namespace WP_DUAL_CHECK\delivery;
+namespace DualCheck2FA\delivery;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -21,7 +21,7 @@ function get_default_mail_provider(): Mail_Provider_Interface {
 	 *
 	 * @param Mail_Provider_Interface $provider Default WordPress mail implementation.
 	 */
-	$filtered = apply_filters('wp_dual_check_mail_provider', $provider);
+	$filtered = apply_filters('dual_check_2fa_mail_provider', $provider);
 
 	return $filtered instanceof Mail_Provider_Interface ? $filtered : $provider;
 }

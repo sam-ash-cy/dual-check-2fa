@@ -1,8 +1,8 @@
 <?php
 
-namespace WP_DUAL_CHECK\core;
+namespace DualCheck2FA\core;
 
-use function WP_DUAL_CHECK\db\dual_check_settings;
+use function DualCheck2FA\db\dual_check_settings;
 
 if (!defined('ABSPATH')) {
 	exit;
@@ -35,7 +35,7 @@ final class Security {
 		 *
 		 * @param bool $bypass Default: super admin (multisite) or user with the administrator role.
 		 */
-		return (bool) apply_filters('wp_dual_check_bypass_capability_matrix', $bypass);
+		return (bool) apply_filters('dual_check_2fa_bypass_capability_matrix', $bypass);
 	}
 
 	/**
@@ -165,7 +165,7 @@ final class Security {
 	}
 
 	/**
-	 * Main WP Dual Check settings + Capabilities screen.
+	 * Main Dual Check 2FA settings + Capabilities screen.
 	 *
 	 * @return bool
 	 */
@@ -173,7 +173,7 @@ final class Security {
 		if (self::bypass_capability_matrix()) {
 			$caps = self::effective_caps_for_context('cap_context_main');
 
-			return (bool) apply_filters('wp_dual_check_user_can', true, self::CONTEXT_MAIN, $caps);
+			return (bool) apply_filters('dual_check_2fa_user_can', true, self::CONTEXT_MAIN, $caps);
 		}
 
 		$caps = self::effective_caps_for_context('cap_context_main');
@@ -186,7 +186,7 @@ final class Security {
 		 * @param string             $context  {@see CONTEXT_MAIN}.
 		 * @param array<int, string> $caps     Effective capability list (OR).
 		 */
-		return (bool) apply_filters('wp_dual_check_user_can', $ok, self::CONTEXT_MAIN, $caps);
+		return (bool) apply_filters('dual_check_2fa_user_can', $ok, self::CONTEXT_MAIN, $caps);
 	}
 
 	/**
@@ -198,7 +198,7 @@ final class Security {
 		if (self::bypass_capability_matrix()) {
 			$caps = self::effective_caps_for_context('cap_context_email');
 
-			return (bool) apply_filters('wp_dual_check_user_can', true, self::CONTEXT_EMAIL, $caps);
+			return (bool) apply_filters('dual_check_2fa_user_can', true, self::CONTEXT_EMAIL, $caps);
 		}
 
 		$caps = self::effective_caps_for_context('cap_context_email');
@@ -211,7 +211,7 @@ final class Security {
 		 * @param string             $context  {@see CONTEXT_EMAIL}.
 		 * @param array<int, string> $caps     Effective capability list (OR).
 		 */
-		return (bool) apply_filters('wp_dual_check_user_can', $ok, self::CONTEXT_EMAIL, $caps);
+		return (bool) apply_filters('dual_check_2fa_user_can', $ok, self::CONTEXT_EMAIL, $caps);
 	}
 
 	/**
