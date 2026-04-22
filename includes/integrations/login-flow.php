@@ -25,7 +25,8 @@ if (!defined('ABSPATH')) {
  * Filters (see each call site):
  * - `dual_check_2fa_site_requires_second_factor` — bool from saved option.
  * - `dual_check_2fa_skip_second_factor` — skip email step (bool, \WP_User); core pre-sets REST/XML‑RPC/cron.
- * - `dual_check_2fa_mail_provider` — in {@see \DualCheck2FA\delivery\get_default_mail_provider()}.
+ * - `dual_check_2fa_mail_provider` — final override in {@see \DualCheck2FA\delivery\get_default_mail_provider()} (after saved provider).
+ * - `dual_check_2fa_registered_mail_providers` — rows for the General settings dropdown; unknown ids still resolve via the mail_provider filter.
  * - `dual_check_2fa_code_step_ip_binding_enabled` — in {@see \DualCheck2FA\auth\Code_Step_Rate_Limit::is_binding_enabled()}.
  * - `dual_check_2fa_code_step_ip_max_fails`, `dual_check_2fa_code_step_ip_lockout_seconds` — lockout tuning.
  * - `dual_check_2fa_record_code_step_failure` — whether to count a failed verify toward IP lockout (bool, reason, user id).
@@ -400,7 +401,8 @@ final class LoginFlow {
 			return;
 		}
 
-		if ('POST' === $_SERVER['REQUEST_METHOD'] && isset($_POST['dual_check_2fa_nonce'])) {
+		$method = isset($_SERVER['REQUEST_METHOD']) ? strtoupper((string) $_SERVER['REQUEST_METHOD']) : '';
+		if ($method === 'POST' && isset($_POST['dual_check_2fa_nonce'])) {
 			$this->handle_code_page_post($session, $pending);
 
 			return;

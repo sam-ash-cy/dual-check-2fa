@@ -32,6 +32,11 @@ class PluginLoad {
 		require_once DUAL_CHECK_2FA_PATH . 'includes/core/loader.php';
 		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/delivery-options/mail-provider-interface.php';
 		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/delivery-options/wp-mail-provider.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/mail-credentials.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/delivery-options/sendgrid-mail-provider.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/delivery-options/postmark-mail-provider.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/delivery-options/mailgun-mail-provider.php';
+		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/mail-provider-catalog.php';
 		require_once DUAL_CHECK_2FA_PATH . 'includes/delivery/registry.php';
 		require_once DUAL_CHECK_2FA_PATH . 'includes/auth/code-generator.php';
 		require_once DUAL_CHECK_2FA_PATH . 'includes/auth/code-validator.php';
