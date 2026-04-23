@@ -49,8 +49,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
+          REF="$TAG_NAME"
+          if [[ "$REF" == dual-check-2fa-* ]]; then
+            REF="${REF#dual-check-2fa-}"
+          fi
           if ! gh release view "$TAG_NAME"; then
-            gh release create "$TAG_NAME" --title="$TAG_NAME" --notes="Automated release for $TAG_NAME"
+            if [[ "$REF" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+-.+ ]]; then
+              gh release create "$TAG_NAME" --title="$TAG_NAME" --notes="Automated release for $TAG_NAME" --prerelease
+            else
+              gh release create "$TAG_NAME" --title="$TAG_NAME" --notes="Automated release for $TAG_NAME"
+            fi
           fi
 
       - name: Attach archive to release
