@@ -30,11 +30,10 @@ jobs:
             includes/\
             templates/\
             vendor/\
-            composer.json\
-            composer.lock\
             dual-check-2fa.php\
             uninstall.php\
             LICENSE\
+            composer.json\
             SECURITY.md\
             readme.txt
       
