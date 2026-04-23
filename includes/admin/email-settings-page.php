@@ -229,9 +229,8 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	private function render_query_flash_notice(): void {
-		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only GET flash set by save handler after redirect.
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only GET flash from redirects after authenticated actions; not form processing.
 		if (!isset($_GET['dc2fa_msg'])) {
-			// phpcs:enable WordPress.Security.NonceVerification.Recommended
 			return;
 		}
 		$key = sanitize_key((string) wp_unslash($_GET['dc2fa_msg']));
