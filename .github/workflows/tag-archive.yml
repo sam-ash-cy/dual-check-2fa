@@ -23,7 +23,7 @@ jobs:
       - name: Create archive
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
-          ARCHIVE_NAME="dual-check-2fa-${TAG_NAME}.zip"
+          ARCHIVE_NAME="dual-check-2fa.zip"
           
           # Create archive with specified directories and file
           zip -r "${ARCHIVE_NAME}" \
@@ -41,7 +41,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: dual-check-2fa-archive
-          path: dual-check-2fa-*.zip
+          path: dual-check-2fa.zip
           retention-days: 90
 
       - name: Create release if it doesn't exist
@@ -49,8 +49,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
+          REF="$TAG_NAME"
+          if [[ "$REF" == dual-check-2fa-* ]]; then
+            REF="${REF#dual-check-2fa-}"
+          fi
           if ! gh release view "$TAG_NAME"; then
-            gh release create "$TAG_NAME" --title="$TAG_NAME" --notes="Automated release for $TAG_NAME"
+            if [[ "$REF" =~ ^v?[0-9]+\.[0-9]+\.[0-9]+-.+ ]]; then
+              gh release create "$TAG_NAME" --title="$TAG_NAME" --notes="Automated release for $TAG_NAME" --prerelease
+            else
+              gh release create "$TAG_NAME" --title="$TAG_NAME" --notes="Automated release for $TAG_NAME"
+            fi
           fi
 
       - name: Attach archive to release
@@ -58,7 +66,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
-          ARCHIVE_NAME="dual-check-2fa-${TAG_NAME}.zip"
-          
+          ARCHIVE_NAME="dual-check-2fa.zip"
+
           echo "=== Attaching ${ARCHIVE_NAME} to release ${TAG_NAME} ==="
           gh release upload "${TAG_NAME}" "${ARCHIVE_NAME}" --clobber
