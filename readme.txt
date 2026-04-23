@@ -8,143 +8,134 @@ Requires PHP: 8.0
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
 
-Adds an email verification code after the user has logged in on the standard WordPress login.
-
 == Description ==
 
-Dual Check 2FA adds a second step to the normal WordPress login. After a user enters the right username and password on `wp-login.php`, the plugin emails them a short code. They enter that code on a follow-up screen to finish signing in.
+Dual Check 2FA runs after a correct username and password on `wp-login.php`.
+It emails an OTP (One time Password) to the users email (configurable to change if needed per account).
+Once the user receives the email, they can enter the code that has been given to them to log in.
+Administrators can configure capabilities (to access this plugin), monitor login activity, change mail providers, and customise the email sent among other things. 
 
-= What you get =
+= Why use it =
 
-* Email code step after a correct password, on the standard login form.
-* One switch to require it site-wide (off by default so you don't lock yourself out by accident).
-* REST API, XML-RPC, and cron requests skip the code step by default so automated tools keep working. This is filterable.
-* Codes are hashed in the database (never stored in plain text), tied to a single challenge, single-use, and any older unused code is invalidated when a new one is issued.
+* **Security-minded by design:** Codes are stored hashed, bound to one challenge, single-use, and superseded when a new code is issued. Pending login uses an HttpOnly cookie with SameSite Strict.
+* **Customisable without code first:** Code length, lifetime, max wrong guesses per code, resend cooldown, optional IP-aware lockout (per user + IP, with configurable thresholds), trusted-device duration, login activity retention, and mail provider choice are all in **Dual Check 2FA → General** (plus dedicated screens for template and permissions).
+* **Easy to operate:** One place for policy, mail, and limits; test send uses the same delivery path as live codes; capability matrix so editors or custom roles can own the email template (or activity list) without full admin—without letting you save a change that locks *you* out of main settings.
 
-= Controls you can tune =
+= Login flow =
 
-* Code length, lifetime, and max wrong attempts per code.
-* Resend cooldown so a user can't keep requesting new codes back to back.
-* Optional IP-aware lockout: after repeated wrong codes from the same IP for the same user, the code step is temporarily blocked. Max failures and lockout length are configurable (or can be disabled with a filter).
+* Second factor only after a successful password on the standard login.
+* Optional **require dual-check for everyone** (off by default so you do not strand the site).
+* Optional **trusted devices** (“remember this browser”) with configurable remember duration.
+* Optional **per-user exemption** when the site allows it.
+* Optional **separate 2FA delivery address** on the user profile when enabled; otherwise the account email is used.
+* On the code step, optional **masked hint** showing where the email was sent (filterable).
 
-= Email =
+= Abuse resistance and automation =
 
-* Default login email is HTML with sensible defaults — works out of the box.
-* Optional custom template mode with subject, body, header, footer, and colour fields. Placeholders like `[site-name]`, `[code]`, and `[user-login]` are supported.
-* "Send test email" on **General → Debugging** (same mail path as live codes) plus template-aware test send when custom templates are enabled.
-* Mail delivery is pluggable through the `dual_check_2fa_mail_provider` filter. Built-in HTTP APIs include SendGrid, Postmark, Mailgun, and Amazon SES; default uses `wp_mail()`, so any SMTP plugin you already use will work.
-* Optional **Login Activity** admin list, **trusted devices** (“remember this browser”), **per-user exemption**, **masked delivery hint** on the code step, and **daily cleanup** for tokens / retention.
+* Wrong-code limit per issued code before that code is dead.
+* Minimum delay between “send a new code” requests.
+* Optional **IP + user binding** on the code step: repeated failures from the same IP for the same user can trigger a short lockout (tunable or disabled via filters).
+* By default **REST API**, **XML-RPC**, and **WP Cron** skip the email step so integrations keep working; override with `dual_check_2fa_skip_second_factor` if your risk model differs.
 
-= Admin experience =
+= Email and delivery =
 
-* Dedicated **Dual Check 2FA** admin area with General, Capabilities, and Login Email Template pages.
-* Capability matrix (OR logic) so you can let non-admins manage settings or the email template without giving them full admin rights.
-* Self-lockout guard: the plugin refuses to save a capability change that would remove your own access to the main settings.
-* Super admins (multisite) and users with the Administrator role can bypass the capability matrix for compatibility. This is also filterable.
+* Default HTML email works out of the box with `wp_mail()` (including any SMTP plugin you already use).
+* Optional **built-in HTTP APIs:** SendGrid, Postmark, Mailgun, Amazon SES—with credentials in settings or via `wp-config` constants where supported.
+* **`dual_check_2fa_mail_provider`** filter for a custom sender or extra providers.
+* Optional **custom template** mode: subject, body, header, footer, colours; placeholders such as `[site-name]`, `[code]`, `[user-login]`.
+* **Send test email** on the Debugging section; when custom templates are on, the test respects that template.
 
-= Optional per-user alternate email =
+= Admin =
 
-If you enable "2FA delivery email on profile", each user gets a profile field where they can set a different address just for login codes. If they leave it blank, their normal account email is used.
+* **Dual Check 2FA** menu: General, **Login Email Template**, **Capabilities**, and **Login Activity** (when recording is enabled).
+* **Capabilities** screen: separate OR-lists for main settings, email template, and login activity; administrators / super admins bypass the matrix by default (`dual_check_2fa_bypass_capability_matrix` to change).
 
-= Open source =
+= Observability and cleanup =
 
-Released under GPLv2 or later — the same license family as WordPress itself. You can use it, read the code, modify it, and share it under those terms.
+* Optional **login activity** list with configurable retention.
+* Optional **JSON debug log** under uploads (separate from core `debug.log` behaviour described in code paths).
+* Optional **scheduled cleanup** of old token rows.
+* **`dual_check_2fa_security_event`** action (and optional debug logging hook) for token issue/verify and related audit signals.
+
+= Multisite and data lifecycle =
+
+* Settings are **per site** in a network.
+* Uninstall removes plugin tables, options, scheduled events, uploads folder (including logs), and relevant user meta across the network. See FAQ for what is stored while active.
+
+GPLv2 or later, same licence family as WordPress.
 
 == Installation ==
 
 = Before you start =
 
-1. Make sure your site can send email. Send yourself a test email from any other source (contact form, password reset, etc.). If those don't arrive, fix email delivery first — otherwise no one will get their login codes. An SMTP plugin (for example WP Mail SMTP, FluentSMTP, Post SMTP) with a real mail provider is strongly recommended.
-2. Keep a second admin user or a way to access your server (FTP, SSH, hosting file manager) in case email breaks and you need to disable the plugin.
+1. Confirm the site can deliver mail (password reset, contact form, etc.). If nothing arrives, fix delivery before relying on codes. A transactional provider or SMTP plugin is strongly recommended.
+2. Keep a second administrator account or filesystem access so you can recover if mail breaks.
 
-= Install the plugin =
+= Install =
 
-1. In your WordPress admin, go to **Plugins → Add New → Upload Plugin**.
-2. Upload the plugin zip and click **Install Now**, then **Activate**.
-3. (Or) upload this plugin’s folder to `/wp-content/plugins/` over FTP/SFTP and activate from the **Plugins** screen.
+1. **Plugins → Add New → Upload Plugin**, install the zip, activate; or upload the plugin folder to `wp-content/plugins/` and activate from **Plugins**.
 
-= Turn it on =
+= Enable =
 
-1. Go to **Dual Check 2FA → General** in the admin menu.
-2. Once that works, switch on the site-wide requirement for everyone to be able to have 2FA and save.
+1. Open **Dual Check 2FA → General**.
+2. Send a test email; when satisfied, enable **require dual-check for everyone** if that matches your policy.
 
-= Sensible starting settings =
+= Sensible starting values =
 
-* Code length: 6
-* Code lifetime: 10 minutes
-* Max wrong attempts per code: 5
-* Resend cooldown: 30–60 seconds
-* IP lockout: on, with a few minutes of lockout after several wrong attempts
+* Code length: 6  
+* Code lifetime: 10 minutes  
+* Max wrong attempts per code: 5  
+* Resend cooldown: 30–60 seconds  
+* IP lockout: on, short lockout after several wrong codes  
 
 == Frequently Asked Questions ==
 
-= What if email delivery is slow or unreliable? =
+= What if email is slow or unreliable? =
 
-The plugin can only send as fast as WP Mail can send it.
+The plugin sends through your configured path as fast as that path allows. Use a reputable transactional provider if deliverability matters.
 
 = What if I get locked out? =
 
-A few options, in order of how disruptive they are:
-
-1. Log in as a second admin account and turn off the site-wide requirement, or change the required-for-everyone setting.
-2. Rename this plugin’s folder under `wp-content/plugins/` over FTP/SFTP or your host's file manager. WordPress will deactivate the plugin on the next admin page load, and you can log in normally. Rename it back afterwards to re-enable it.
-3. If you have database access, delete the row for `dual_check_2fa_settings` in the `wp_options` table. The plugin will fall back to defaults (second step not required) until you save settings again.
+1. Sign in with another admin and relax policy or exemptions.  
+2. Rename the plugin folder under `wp-content/plugins/` via SFTP or the host file manager so WordPress deactivates it; sign in; rename back.  
+3. With database access, remove the `dual_check_2fa_settings` option row to fall back to defaults until you save settings again.
 
 = Can some requests skip the code step? =
 
-Yes. By default REST API, XML-RPC, and cron skip it so normal WordPress automation still works. You can change this with the `dual_check_2fa_skip_second_factor` filter.
+Yes. REST, XML-RPC, and cron skip by default. Use `dual_check_2fa_skip_second_factor` to change behaviour.
 
 = Does it work on multisite? =
 
-Yes. Settings are per site. Super admins bypass the capability matrix by default (you can override this with a filter). Uninstall cleans up data on every site in the network.
+Yes. Settings are per site. Super admins bypass the capability matrix unless you filter that. Uninstall cleans every site in the network.
 
 = What does it store? =
 
-* Tables `{prefix}dual_check` (tokens), `{prefix}dual_check_events` (login activity), and `{prefix}dual_check_trusted_devices` (remembered browsers).
-* Options: `dual_check_2fa_settings` plus schema markers `dual_check_2fa_db_version`, `dual_check_2fa_events_db_version`, `dual_check_2fa_trusted_devices_db_version`.
-* User meta `dual_check_2fa_email` (alternate code address) and `dual_check_2fa_exempt` (per-user exemption when enabled).
-* Short-lived transients prefixed with `dc2fa_` (they expire on their own).
-* If debug logging is enabled: JSON log lines under `wp-content/uploads/dual-check-2fa/logs/debug.log`.
+* Tables: `{prefix}dual_check` (tokens), `{prefix}dual_check_events` (login activity), `{prefix}dual_check_trusted_devices` (remembered browsers).  
+* Options: `dual_check_2fa_settings` and schema version keys.  
+* User meta: `dual_check_2fa_email` (alternate delivery address), `dual_check_2fa_exempt` (when exemptions are enabled).  
+* Transients prefixed `dc2fa_` (short-lived).  
+* Optional debug log: `wp-content/uploads/dual-check-2fa/logs/debug.log` when that mode is on.
 
 = What happens when I delete the plugin? =
 
-Deleting from **Plugins → Delete** runs a cleanup that:
+Deleting from **Plugins** runs cleanup: drops plugin tables on each site, deletes plugin options and scheduled GC event, removes the listed user meta network-wide, and deletes the `dual-check-2fa` folder under each site’s uploads. Transients are not bulk-deleted; they expire on their own.
 
-* Drops the plugin tables on every site.
-* Deletes plugin options (including schema markers) on every site.
-* Removes `dual_check_2fa_email` and `dual_check_2fa_exempt` user meta network-wide.
-* Clears the `dual_check_2fa_token_gc` scheduled event.
-* Deletes the `dual-check-2fa` folder under each site's uploads (including logs), if present.
+= Can a non-admin manage settings or the template? =
 
-It does not touch transients directly — they expire on their own — and it does not touch any other plugin's data.
-
-= Can I let an editor or custom role manage the settings without being an admin? =
-
-Yes. Under **Dual Check 2FA → Capabilities** you can set which capabilities grant access to the main settings and to the email template separately. The check uses OR logic: any matching capability gets access. The plugin will not let you save a change that would lock yourself out of the main settings.
+Yes. **Capabilities** assigns OR-capability lists for main settings, email template, and login activity. The plugin blocks saves that would remove your own access to contexts you currently satisfy.
 
 == Requirements ==
 
-* WordPress 6.8 or newer.
-* PHP 8.0 or newer.
-* Outbound email that actually delivers to your users.
+* WordPress 6.0 or newer.  
+* PHP 8.0 or newer.  
+* Outbound email that reaches real inboxes.
 
 == Known issues and things to watch for ==
 
-* **Spam folders.** Tell users to check there the first time. Ask them to whitelist or mark the sender as "not spam" so later codes land in the inbox.
-* **Clock drift on the server.** Codes expire based on server time. If your server clock is badly wrong, codes may appear to expire immediately. Check NTP/time sync on the host.
-* **Aggressive caching.** Some hosts cache the login page. If the code screen behaves oddly (same code accepted twice, blank page after submit), exclude `wp-login.php` from full-page caching.
-* **Reverse proxies / CDNs and IP lockout.** The IP-aware lockout reads the client IP. If all traffic reaches WordPress from a single proxy IP, one user's failures can lock out others on the same address. Either terminate the real IP upstream (so WordPress sees `REMOTE_ADDR` correctly), or override it with the `dual_check_2fa_client_ip` filter, or turn off the IP binding with `dual_check_2fa_code_step_ip_binding_enabled`.
-* **Automated tools (REST API, XML-RPC, cron) skip the second step by default.** If you want them covered too, override with the `dual_check_2fa_skip_second_factor` filter, but be aware that third-party apps using application passwords or similar cannot complete an email code step.
-* **Menu visibility with custom capabilities.** WordPress submenu registration needs a single capability string. If you configure several capabilities for a context, the first one in the list is used for menu visibility. Users matching a later capability can still use the page by URL. If that matters for your site, put the "menu owner" capability first.
-
-== Changelog ==
-
-= 1.1.0 =
-* Composer classmap autoload with committed `vendor/`.
-* Daily cron: token table GC, expired trusted devices, login activity retention.
-* General → Debugging: send test email; token GC toggle; login activity toggle + retention.
-* Per-user 2FA exemption (admin profile) and trusted devices with profile revoke UI.
-* Login Activity admin page (`{prefix}dual_check_events`).
-* Masked delivery address hint on the code step; Amazon SES HTTP API provider.
-* Documentation updates for new filters, constants, and tables.
+* **Spam folders** on first delivery; ask users to whitelist the sender.  
+* **Server clock:** expiry uses server time; fix NTP if codes appear to die instantly.  
+* **Full-page caching** of `wp-login.php` can break the code step; exclude it from aggressive cache.  
+* **Reverse proxies:** IP lockout uses the IP WordPress sees. If everyone appears as one proxy IP, tune `dual_check_2fa_client_ip`, disable binding with `dual_check_2fa_code_step_ip_binding_enabled`, or fix upstream forwarded headers.  
+* **REST/XML-RPC/cron** skip the second step by default; forcing them through email may break clients that cannot complete an interactive step.  
+* **Submenu capability:** WordPress needs one capability string for menu visibility; with multiple caps, the first listed “owns” the menu. Users who match a later cap can still open the screen by URL—order caps with that in mind.
 

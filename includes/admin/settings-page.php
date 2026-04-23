@@ -4,6 +4,7 @@ namespace DualCheck2FA\admin;
 
 use DualCheck2FA\core\Security;
 use DualCheck2FA\delivery\Mail_Credentials;
+use DualCheck2FA\email\Login_Email_Builder;
 use function DualCheck2FA\delivery\get_default_mail_provider;
 use function DualCheck2FA\delivery\get_registered_mail_providers;
 use function DualCheck2FA\delivery\normalize_mail_provider_id;
@@ -355,7 +356,16 @@ final class Settings_Page implements Admin_Settings_Page {
 			if (empty($out['email_use_custom_template'])) {
 				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 			}
-			$out = Email_Settings_Page::merge_from_post($input, $out);
+			$trial = Email_Settings_Page::merge_from_post($input, $out);
+			if (!Login_Email_Builder::custom_template_includes_code_token($trial)) {
+				Settings_Notices::error(
+					'dc2fa_email_no_code_token',
+					__('When the body is not empty, include the [code] placeholder in the subject, body, header, or footer so recipients receive their login code. Your previous template is unchanged.', 'dual-check-2fa')
+				);
+
+				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+			}
+			$out = $trial;
 
 			return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 		}
@@ -441,6 +451,14 @@ final class Settings_Page implements Admin_Settings_Page {
 			$out[ Mail_Credentials::SES_CONFIGURATION_SET_OPTION ] = sanitize_text_field(
 				trim((string) wp_unslash($input[ Mail_Credentials::SES_CONFIGURATION_SET_OPTION ]))
 			);
+		}
+
+		if (!empty($out['email_use_custom_template']) && !Login_Email_Builder::custom_template_includes_code_token($out)) {
+			Settings_Notices::error(
+				'dc2fa_email_no_code_token_main',
+				__('Custom email template is turned off: when the body is not empty, the subject, body, header, or footer must include the [code] placeholder. Fix the template under Login Email Template, then enable custom template again.', 'dual-check-2fa')
+			);
+			$out['email_use_custom_template'] = 0;
 		}
 
 		return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
