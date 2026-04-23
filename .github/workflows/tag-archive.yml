@@ -23,7 +23,7 @@ jobs:
       - name: Create archive
         run: |
           TAG_NAME=${GITHUB_REF#refs/tags/}
-          ARCHIVE_NAME="dual-check-2fa-${TAG_NAME}.zip"
+          ARCHIVE_NAME="dual-check-2fa.zip"
           
           # Create archive with specified directories and file
           zip -r "${ARCHIVE_NAME}" \
