@@ -16,8 +16,9 @@ final class Request_Context {
 	 */
 	public static function client_ip(): string {
 		$ip = '';
-		if (isset($_SERVER['REMOTE_ADDR']) && is_string($_SERVER['REMOTE_ADDR'])) {
-			$ip = wp_unslash($_SERVER['REMOTE_ADDR']);
+	if (isset($_SERVER['REMOTE_ADDR']) && is_string($_SERVER['REMOTE_ADDR'])) {
+		// phpcs:ignore WordPress.Security.ValidatedSanitizedInput.InputNotSanitized -- REMOTE_ADDR used for logging only; filterable via dual_check_2fa_client_ip.
+		$ip = wp_unslash($_SERVER['REMOTE_ADDR']);
 		}
 
 		/**

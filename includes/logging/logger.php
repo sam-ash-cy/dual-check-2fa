@@ -29,6 +29,16 @@ final class Logger {
 	 * @return void
 	 */
 	public static function debug(string $event, array $context = array()): void {
+		if ($event === 'login_success') {
+			/**
+			 * Fires for login activity persistence (mirrors other security events).
+			 *
+			 * @param string               $event   Event key.
+			 * @param array<string, mixed> $context Context.
+			 */
+			do_action('dual_check_2fa_security_event', $event, $context);
+		}
+
 		if (empty(dual_check_settings()['debug_logging'])) {
 			return;
 		}

@@ -92,34 +92,53 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 			array($this, 'section_email_intro'),
 			self::PAGE
 		);
+
+		add_settings_section(
+			'dc2fa_cap_activity',
+			__('Login Activity', 'dual-check-2fa'),
+			array($this, 'section_activity_intro'),
+			self::PAGE
+		);
 	}
 
 	/**
+	 * @param mixed $section Section definition passed by {@see do_settings_sections()} (unused).
 	 * @return void
 	 */
-	public function section_pool_intro(): void {
+	public function section_pool_intro( $section = null ): void {
 		echo '<p class="description">' . esc_html__('Select capabilities to include in the pool. Each access rule below can only use caps from this pool (plus you can add custom slugs).', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
+	 * @param mixed $section Section definition passed by {@see do_settings_sections()} (unused).
 	 * @return void
 	 */
-	public function section_main_intro(): void {
+	public function section_main_intro( $section = null ): void {
 		echo '<p class="description">' . esc_html__('Users who have any one of the selected capabilities may open General settings, save them, and use this Capabilities screen.', 'dual-check-2fa') . '</p>';
 		$this->render_context_checkboxes('cap_context_main', 'cap_main');
 	}
 
 	/**
+	 * @param mixed $section Section definition passed by {@see do_settings_sections()} (unused).
 	 * @return void
 	 */
-	public function section_email_intro(): void {
+	public function section_email_intro( $section = null ): void {
 		echo '<p class="description">' . esc_html__('Users who have any one of the selected capabilities may use the Login Email Template screen (when custom template is enabled) and send test emails.', 'dual-check-2fa') . '</p>';
 		$this->render_context_checkboxes('cap_context_email', 'cap_email');
 	}
 
 	/**
-	 * @param string $context_key Option key `cap_context_main` or `cap_context_email`.
-	 * @param string $post_prefix Post array prefix `cap_main` or `cap_email`.
+	 * @param mixed $section Section definition passed by {@see do_settings_sections()} (unused).
+	 * @return void
+	 */
+	public function section_activity_intro( $section = null ): void {
+		echo '<p class="description">' . esc_html__('Users who have any one of the selected capabilities may open the Login Activity screen (recorded security events).', 'dual-check-2fa') . '</p>';
+		$this->render_context_checkboxes('cap_context_activity', 'cap_activity');
+	}
+
+	/**
+	 * @param string $context_key Option key `cap_context_main`, `cap_context_email`, or `cap_context_activity`.
+	 * @param string $post_prefix Post array prefix `cap_main`, `cap_email`, or `cap_activity`.
 	 * @return void
 	 */
 	private function render_context_checkboxes(string $context_key, string $post_prefix): void {
@@ -127,6 +146,13 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 		$pool    = isset($opts['cap_pool']) && is_array($opts['cap_pool']) ? Security::normalize_cap_list($opts['cap_pool']) : array('manage_options');
 		$active  = isset($opts[ $context_key ]) && is_array($opts[ $context_key ]) ? Security::normalize_cap_list($opts[ $context_key ]) : array('manage_options');
 		$name    = Settings_Page::OPTION_NAME;
+
+		// Ensures this context is present in $_POST even when every box is unchecked (otherwise merge cannot tell “all off” from “not submitted”).
+		printf(
+			'<input type="hidden" name="%1$s[%2$s][_sentinel]" value="1" />',
+			esc_attr($name),
+			esc_attr($post_prefix)
+		);
 
 		foreach ($pool as $slug) {
 			$id    = 'dc2fa_' . $post_prefix . '_' . $slug;
@@ -238,19 +264,24 @@ final class Permissions_Settings_Page implements Admin_Settings_Page {
 		$out['cap_pool'] = $pool;
 
 		foreach (array(
-			'cap_main'   => 'cap_context_main',
-			'cap_email'  => 'cap_context_email',
+			'cap_main'     => 'cap_context_main',
+			'cap_email'    => 'cap_context_email',
+			'cap_activity' => 'cap_context_activity',
 		) as $postKey => $optKey) {
+			if (!isset($input[ $postKey ]) || !is_array($input[ $postKey ])) {
+				continue;
+			}
 			$selected = array();
-			if (!empty($input[ $postKey ]) && is_array($input[ $postKey ])) {
-				foreach ($input[ $postKey ] as $slug => $on) {
-					if (empty($on)) {
-						continue;
-					}
-					$s = Security::sanitize_cap_slug((string) $slug);
-					if ($s !== '' && in_array($s, $pool, true)) {
-						$selected[] = $s;
-					}
+			foreach ($input[ $postKey ] as $slug => $on) {
+				if ((string) $slug === '_sentinel') {
+					continue;
+				}
+				if (empty($on)) {
+					continue;
+				}
+				$s = Security::sanitize_cap_slug((string) $slug);
+				if ($s !== '' && in_array($s, $pool, true)) {
+					$selected[] = $s;
 				}
 			}
 			$out[ $optKey ] = Security::normalize_cap_list($selected);

@@ -33,6 +33,10 @@ function get_registered_mail_providers(): array {
 			'id'    => 'mailgun',
 			'label' => __('Mailgun (HTTP API)', 'dual-check-2fa'),
 		),
+		array(
+			'id'    => 'ses',
+			'label' => __('Amazon SES (HTTP API)', 'dual-check-2fa'),
+		),
 	);
 
 	/**
@@ -88,6 +92,8 @@ function create_mail_provider_from_settings(array $settings): Mail_Provider_Inte
 			return new Postmark_Mail_Provider($settings);
 		case 'mailgun':
 			return new Mailgun_Mail_Provider($settings);
+		case 'ses':
+			return new Ses_Mail_Provider($settings);
 		default:
 			return new Wp_Mail_Provider();
 	}

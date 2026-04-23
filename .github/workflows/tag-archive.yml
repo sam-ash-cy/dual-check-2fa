@@ -29,9 +29,11 @@ jobs:
           zip -r "${ARCHIVE_NAME}" \
             includes/\
             templates/\
+            vendor/\
             dual-check-2fa.php\
             uninstall.php\
             LICENSE\
+            composer.json\
             SECURITY.md\
             readme.txt
       

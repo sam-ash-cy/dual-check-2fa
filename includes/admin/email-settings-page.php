@@ -229,10 +229,14 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 	 * @return void
 	 */
 	private function render_query_flash_notice(): void {
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only GET flash set by save handler after redirect.
 		if (!isset($_GET['dc2fa_msg'])) {
+			// phpcs:enable WordPress.Security.NonceVerification.Recommended
 			return;
 		}
 		$key = sanitize_key((string) wp_unslash($_GET['dc2fa_msg']));
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+
 		if ($key === 'test_ok') {
 			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Test email sent.', 'dual-check-2fa') . '</p></div>';
 
@@ -291,6 +295,7 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 		$list = '[site-name], [code], [user-login], [expires], [site-url]';
 		echo '<p>' . esc_html__('Placeholders in subject and body are replaced when mail is sent.', 'dual-check-2fa') . '</p>';
 		echo '<p class="description"><code>' . esc_html($list) . '</code></p>';
+		echo '<p class="description">' . esc_html__('If the body is not empty, [code] must appear in the subject, body, header, or footer (any letter case). Leave the body empty to use the default layout, which always includes the code.', 'dual-check-2fa') . '</p>';
 	}
 
 	/**
@@ -320,7 +325,7 @@ final class Email_Settings_Page implements Admin_Settings_Page {
 			esc_attr(Settings_Page::OPTION_NAME),
 			esc_textarea($v)
 		);
-		echo '<p class="description">' . esc_html__('If empty, the default body will be used.', 'dual-check-2fa') . '</p>';
+		echo '<p class="description">' . esc_html__('If empty, the default body will be used (includes [code]). If you write your own body, include [code] or put it in the subject, header, or footer instead.', 'dual-check-2fa') . '</p>';
 	}
 
 	/**

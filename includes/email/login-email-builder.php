@@ -51,6 +51,32 @@ final class Login_Email_Builder {
 	}
 
 	/**
+	 * Whether custom template mode is satisfied on save: a non-empty body must include `[code]`
+	 * (any case) in subject, body, header, or footer; an empty body uses the built-in default body which always
+	 * includes the token.
+	 *
+	 * @param array<string, mixed> $settings Merged plugin options.
+	 * @return bool
+	 */
+	public static function custom_template_includes_code_token(array $settings): bool {
+		if (!self::use_custom_email_template($settings)) {
+			return true;
+		}
+		$body = isset($settings['email_body_template']) ? trim((string) $settings['email_body_template']) : '';
+		if ($body === '') {
+			return true;
+		}
+		$parts = array(
+			isset($settings['email_subject_template']) ? (string) $settings['email_subject_template'] : '',
+			$body,
+			isset($settings['email_header_html']) ? (string) $settings['email_header_html'] : '',
+			isset($settings['email_footer_html']) ? (string) $settings['email_footer_html'] : '',
+		);
+
+		return (bool) preg_match('/\[code\]/i', implode("\n", $parts));
+	}
+
+	/**
 	 * Whether saved custom subject/body/header/footer should be used instead of bundled defaults.
 	 *
 	 * @param array<string, mixed> $settings Merged plugin options.

@@ -4,6 +4,8 @@ namespace DualCheck2FA\admin;
 
 use DualCheck2FA\core\Security;
 use DualCheck2FA\delivery\Mail_Credentials;
+use DualCheck2FA\email\Login_Email_Builder;
+use function DualCheck2FA\delivery\get_default_mail_provider;
 use function DualCheck2FA\delivery\get_registered_mail_providers;
 use function DualCheck2FA\delivery\normalize_mail_provider_id;
 
@@ -22,6 +24,8 @@ final class Settings_Page implements Admin_Settings_Page {
 	public const OPTION_GROUP = 'dual_check_2fa_settings_group';
 
 	public const MENU_SLUG = 'dual-check-2fa';
+
+	public const TEST_EMAIL_ACTION = 'dual_check_2fa_test_email_general';
 
 	public const CODE_LIFETIME_MIN = 5;
 
@@ -55,6 +59,7 @@ final class Settings_Page implements Admin_Settings_Page {
 	public function register(): void {
 		add_action('admin_menu', array($this, 'add_main_menu'));
 		add_action('admin_init', array($this, 'register_settings'));
+		add_action('admin_post_' . self::TEST_EMAIL_ACTION, array($this, 'handle_test_email_general'));
 	}
 
 	/**
@@ -92,11 +97,18 @@ final class Settings_Page implements Admin_Settings_Page {
 			self::OPTION_GROUP,
 			self::OPTION_NAME,
 			array(
-				'type'              => 'array',
-				'sanitize_callback' => array($this, 'sanitize'),
-				'default'           => self::defaults(),
+				'type'    => 'array',
+				'default' => self::defaults(),
 			)
 		);
+
+		/**
+		 * Do not register {@see self::sanitize()} as {@code sanitize_option_*} here: {@see update_option()}
+		 * always runs {@see sanitize_option()}, which would invoke that callback a second time with the
+		 * already-saved row (no {@code save_context}), so the handler would mis-detect “main” save and
+		 * revert capability changes and booleans. Sanitization runs only from {@see Settings_Save_Handler}
+		 * (and any other explicit callers) before {@see update_option()}.
+		 */
 
 		/**
 		 * Core options.php only supports a single capability per option page. This plugin saves
@@ -116,6 +128,30 @@ final class Settings_Page implements Admin_Settings_Page {
 			'require_2fa_all_users',
 			__('Require dual-check for everyone', 'dual-check-2fa'),
 			array($this, 'field_require_2fa_all_users'),
+			self::MENU_SLUG,
+			'dual_check_2fa_policy'
+		);
+
+		add_settings_field(
+			'allow_user_exempt',
+			__('Allow per-user 2FA exemption', 'dual-check-2fa'),
+			array($this, 'field_allow_user_exempt'),
+			self::MENU_SLUG,
+			'dual_check_2fa_policy'
+		);
+
+		add_settings_field(
+			'allow_trusted_devices',
+			__('Allow trusted devices', 'dual-check-2fa'),
+			array($this, 'field_allow_trusted_devices'),
+			self::MENU_SLUG,
+			'dual_check_2fa_policy'
+		);
+
+		add_settings_field(
+			'trusted_devices_days',
+			__('Remember duration (days)', 'dual-check-2fa'),
+			array($this, 'field_trusted_devices_days'),
 			self::MENU_SLUG,
 			'dual_check_2fa_policy'
 		);
@@ -229,6 +265,31 @@ final class Settings_Page implements Admin_Settings_Page {
 			self::MENU_SLUG,
 			'dual_check_2fa_debugging'
 		);
+
+		add_settings_field(
+			'token_gc_enabled',
+			__('Token table cleanup', 'dual-check-2fa'),
+			array($this, 'field_token_gc_enabled'),
+			self::MENU_SLUG,
+			'dual_check_2fa_debugging'
+		);
+
+		add_settings_field(
+			'activity_enabled',
+			__('Record login activity', 'dual-check-2fa'),
+			array($this, 'field_activity_enabled'),
+			self::MENU_SLUG,
+			'dual_check_2fa_debugging'
+		);
+
+		add_settings_field(
+			'activity_retention_days',
+			__('Login activity retention (days)', 'dual-check-2fa'),
+			array($this, 'field_activity_retention_days'),
+			self::MENU_SLUG,
+			'dual_check_2fa_debugging'
+		);
+
 	}
 
 	/**
@@ -244,6 +305,8 @@ final class Settings_Page implements Admin_Settings_Page {
 
 	/**
 	 * Merges posted values into the stored option; supports split saves via `save_context` (main vs email).
+	 * Called explicitly from {@see Settings_Save_Handler} before {@see update_option()} — not registered
+	 * as {@code sanitize_option_*} (see {@see register_settings()}).
 	 *
 	 * @param array<string, mixed>|null $input Raw `$_POST` slice for {@see Settings_Page::OPTION_NAME}.
 	 * @return array<string, mixed>
@@ -273,6 +336,14 @@ final class Settings_Page implements Admin_Settings_Page {
 
 				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 			}
+			if (!Security::current_user_passes_activity_context_with_settings($trial)) {
+				Settings_Notices::error(
+					'dc2fa_cap_activity_lockout',
+					__('Those capability settings were not saved because your account would no longer match “Login activity”.', 'dual-check-2fa')
+				);
+
+				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+			}
 			$out = $trial;
 
 			return self::normalize_email_settings(self::clamp_numeric_settings($out));
@@ -285,7 +356,16 @@ final class Settings_Page implements Admin_Settings_Page {
 			if (empty($out['email_use_custom_template'])) {
 				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 			}
-			$out = Email_Settings_Page::merge_from_post($input, $out);
+			$trial = Email_Settings_Page::merge_from_post($input, $out);
+			if (!Login_Email_Builder::custom_template_includes_code_token($trial)) {
+				Settings_Notices::error(
+					'dc2fa_email_no_code_token',
+					__('When the body is not empty, include the [code] placeholder in the subject, body, header, or footer so recipients receive their login code. Your previous template is unchanged.', 'dual-check-2fa')
+				);
+
+				return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
+			}
+			$out = $trial;
 
 			return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 		}
@@ -330,12 +410,24 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 		$out['code_step_ip_rate_limit_enabled'] = !empty($input['code_step_ip_rate_limit_enabled']) ? 1 : 0;
 
+		$out['allow_user_exempt']       = !empty($input['allow_user_exempt']) ? 1 : 0;
+		$out['allow_trusted_devices']   = !empty($input['allow_trusted_devices']) ? 1 : 0;
+		$out['token_gc_enabled']        = !empty($input['token_gc_enabled']) ? 1 : 0;
+		$out['activity_enabled']        = !empty($input['activity_enabled']) ? 1 : 0;
+		if (isset($input['trusted_devices_days'])) {
+			$out['trusted_devices_days'] = absint($input['trusted_devices_days']);
+		}
+		if (isset($input['activity_retention_days'])) {
+			$out['activity_retention_days'] = absint($input['activity_retention_days']);
+		}
+
 		$out['mail_custom_provider_enabled'] = !empty($input['mail_custom_provider_enabled']) ? 1 : 0;
 		$mid_raw                             = isset($input['mail_provider_id']) ? (string) $input['mail_provider_id'] : (string) ($out['mail_provider_id'] ?? 'wp_mail');
 		$out['mail_provider_id']             = normalize_mail_provider_id($mid_raw);
 		$out                                 = self::merge_mail_provider_secret($out, $input, Mail_Credentials::SENDGRID_KEY_OPTION);
 		$out                                 = self::merge_mail_provider_secret($out, $input, Mail_Credentials::POSTMARK_TOKEN_OPTION);
 		$out                                 = self::merge_mail_provider_secret($out, $input, Mail_Credentials::MAILGUN_KEY_OPTION);
+		$out                                 = self::merge_mail_provider_secret($out, $input, Mail_Credentials::SES_SECRET_ACCESS_KEY_OPTION);
 		if (array_key_exists('mail_mailgun_domain', $input) && is_string($input['mail_mailgun_domain'])) {
 			$d = strtolower(sanitize_text_field(trim(wp_unslash($input['mail_mailgun_domain']))));
 			$d = (string) preg_replace('#^https?://#', '', $d);
@@ -345,6 +437,29 @@ final class Settings_Page implements Admin_Settings_Page {
 			? sanitize_key((string) $input[ Mail_Credentials::MAILGUN_REGION_OPTION ])
 			: '';
 		$out[ Mail_Credentials::MAILGUN_REGION_OPTION ] = $reg === 'eu' ? 'eu' : 'us';
+
+		if (array_key_exists(Mail_Credentials::SES_ACCESS_KEY_ID_OPTION, $input)) {
+			$out[ Mail_Credentials::SES_ACCESS_KEY_ID_OPTION ] = sanitize_text_field(
+				trim((string) wp_unslash($input[ Mail_Credentials::SES_ACCESS_KEY_ID_OPTION ]))
+			);
+		}
+		if (array_key_exists(Mail_Credentials::SES_REGION_OPTION, $input)) {
+			$r = strtolower(sanitize_text_field(trim((string) wp_unslash($input[ Mail_Credentials::SES_REGION_OPTION ]))));
+			$out[ Mail_Credentials::SES_REGION_OPTION ] = $r !== '' ? $r : 'us-east-1';
+		}
+		if (array_key_exists(Mail_Credentials::SES_CONFIGURATION_SET_OPTION, $input)) {
+			$out[ Mail_Credentials::SES_CONFIGURATION_SET_OPTION ] = sanitize_text_field(
+				trim((string) wp_unslash($input[ Mail_Credentials::SES_CONFIGURATION_SET_OPTION ]))
+			);
+		}
+
+		if (!empty($out['email_use_custom_template']) && !Login_Email_Builder::custom_template_includes_code_token($out)) {
+			Settings_Notices::error(
+				'dc2fa_email_no_code_token_main',
+				__('Custom email template is turned off: when the body is not empty, the subject, body, header, or footer must include the [code] placeholder. Fix the template under Login Email Template, then enable custom template again.', 'dual-check-2fa')
+			);
+			$out['email_use_custom_template'] = 0;
+		}
 
 		return self::normalize_email_settings(self::clamp_numeric_settings(self::normalize_capability_arrays($out)));
 	}
@@ -429,6 +544,8 @@ final class Settings_Page implements Admin_Settings_Page {
 			$this->render_mail_provider_postmark_row($n);
 		} elseif ($cur === 'mailgun') {
 			$this->render_mail_provider_mailgun_row($n, $opts);
+		} elseif ($cur === 'ses') {
+			$this->render_mail_provider_ses_row($n, $opts);
 		} else {
 			echo '<p class="description">' . esc_html__(
 				'Extra options for this provider are not shown here; use the dual_check_2fa_mail_provider filter to supply an implementation.',
@@ -511,13 +628,13 @@ final class Settings_Page implements Admin_Settings_Page {
 				'dual-check-2fa'
 			) . '</p>';
 		} else {
-			printf(
-				'<p><label for="wpdc_mg_domain">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_mg_domain" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
-				esc_html__('Sending domain (e.g. mg.example.com)', 'dual-check-2fa'),
-				esc_attr($n),
-				esc_attr($dom_opt),
-				$domain_v
-			);
+		printf(
+			'<p><label for="wpdc_mg_domain">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_mg_domain" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
+			esc_html__('Sending domain (e.g. mg.example.com)', 'dual-check-2fa'),
+			esc_attr($n),
+			esc_attr($dom_opt),
+			esc_attr($domain_v)
+		);
 		}
 		if (Mail_Credentials::constant_is_set(Mail_Credentials::MAILGUN_REGION_CONSTANT)) {
 			echo '<p class="description">' . esc_html__(
@@ -549,6 +666,87 @@ final class Settings_Page implements Admin_Settings_Page {
 				esc_attr($key_opt),
 				esc_attr__('Leave blank to keep the current key', 'dual-check-2fa')
 			);
+		}
+		echo '</div>';
+	}
+
+	/**
+	 * @param string               $n    Option array name.
+	 * @param array<string, mixed> $opts Current options.
+	 */
+	private function render_mail_provider_ses_row(string $n, array $opts): void {
+		$ak_opt  = Mail_Credentials::SES_ACCESS_KEY_ID_OPTION;
+		$sk_opt  = Mail_Credentials::SES_SECRET_ACCESS_KEY_OPTION;
+		$reg_opt = Mail_Credentials::SES_REGION_OPTION;
+		$cs_opt  = Mail_Credentials::SES_CONFIGURATION_SET_OPTION;
+		$ak_c    = Mail_Credentials::SES_ACCESS_KEY_ID_CONSTANT;
+		$sk_c    = Mail_Credentials::SES_SECRET_ACCESS_KEY_CONSTANT;
+		$reg_c   = Mail_Credentials::SES_REGION_CONSTANT;
+		$cs_c    = Mail_Credentials::SES_CONFIGURATION_SET_CONSTANT;
+		$region  = isset($opts[ $reg_opt ]) && is_string($opts[ $reg_opt ]) && $opts[ $reg_opt ] !== ''
+			? esc_attr($opts[ $reg_opt ])
+			: 'us-east-1';
+		$cs_val  = '';
+		if (!Mail_Credentials::constant_is_set($cs_c) && isset($opts[ $cs_opt ]) && is_string($opts[ $cs_opt ])) {
+			$cs_val = esc_attr($opts[ $cs_opt ]);
+		}
+		echo '<div class="wpdc-mail-provider-sub">';
+		echo '<p><strong>' . esc_html__('Amazon SES', 'dual-check-2fa') . '</strong></p>';
+		if (Mail_Credentials::constant_is_set($ak_c)) {
+			echo '<p class="description">' . esc_html__(
+				'Access key ID is set in wp-config via DUAL_CHECK_2FA_SES_ACCESS_KEY_ID.',
+				'dual-check-2fa'
+			) . '</p>';
+		} else {
+			printf(
+				'<p><label for="wpdc_ses_ak">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_ses_ak" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
+				esc_html__('Access key ID', 'dual-check-2fa'),
+				esc_attr($n),
+				esc_attr($ak_opt),
+				isset($opts[ $ak_opt ]) && is_string($opts[ $ak_opt ]) ? esc_attr($opts[ $ak_opt ]) : ''
+			);
+		}
+		if (Mail_Credentials::constant_is_set($sk_c)) {
+			echo '<p class="description">' . esc_html__(
+				'Secret access key is set in wp-config via DUAL_CHECK_2FA_SES_SECRET_ACCESS_KEY.',
+				'dual-check-2fa'
+			) . '</p>';
+		} else {
+			printf(
+				'<p><label for="wpdc_ses_sk">%1$s</label><br /><input type="password" class="regular-text" id="wpdc_ses_sk" name="%2$s[%3$s]" value="" autocomplete="new-password" placeholder="%4$s" /></p>',
+				esc_html__('Secret access key', 'dual-check-2fa'),
+				esc_attr($n),
+				esc_attr($sk_opt),
+				esc_attr__('Leave blank to keep the current secret', 'dual-check-2fa')
+			);
+		}
+		if (Mail_Credentials::constant_is_set($reg_c)) {
+			echo '<p class="description">' . esc_html__(
+				'Region is set in wp-config via DUAL_CHECK_2FA_SES_REGION.',
+				'dual-check-2fa'
+			) . '</p>';
+		} else {
+		printf(
+			'<p><label for="wpdc_ses_region">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_ses_region" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
+			esc_html__('Region (e.g. us-east-1)', 'dual-check-2fa'),
+			esc_attr($n),
+			esc_attr($reg_opt),
+			esc_attr($region)
+		);
+		}
+		if (Mail_Credentials::constant_is_set($cs_c)) {
+			echo '<p class="description">' . esc_html__(
+				'Configuration set is set in wp-config via DUAL_CHECK_2FA_SES_CONFIGURATION_SET.',
+				'dual-check-2fa'
+			) . '</p>';
+		} else {
+			printf(
+				'<p><label for="wpdc_ses_cs">%1$s</label><br /><input type="text" class="regular-text" id="wpdc_ses_cs" name="%2$s[%3$s]" value="%4$s" autocomplete="off" /></p>',
+			esc_html__('Configuration set name (optional)', 'dual-check-2fa'),
+			esc_attr($n),
+			esc_attr($cs_opt),
+			esc_attr($cs_val)
+		);
 		}
 		echo '</div>';
 	}
@@ -758,6 +956,196 @@ final class Settings_Page implements Admin_Settings_Page {
 	}
 
 	/**
+	 * @return void
+	 */
+	public function field_allow_user_exempt(): void {
+		if (!Security::can_access_main_settings()) {
+			return;
+		}
+		$opts    = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
+		$checked = !empty($opts['allow_user_exempt']);
+		$n       = self::OPTION_NAME;
+		printf('<input type="hidden" name="%s[allow_user_exempt]" value="0" />', esc_attr($n));
+		printf(
+			'<label><input type="checkbox" name="%1$s[allow_user_exempt]" value="1" %2$s /> %3$s</label>',
+			esc_attr($n),
+			checked($checked, true, false),
+			esc_html__('Allow administrators to exempt individual users from 2FA on their profile.', 'dual-check-2fa')
+		);
+	}
+
+	/**
+	 * @return void
+	 */
+	public function field_allow_trusted_devices(): void {
+		if (!Security::can_access_main_settings()) {
+			return;
+		}
+		$opts    = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
+		$checked = !empty($opts['allow_trusted_devices']);
+		$n       = self::OPTION_NAME;
+		printf('<input type="hidden" name="%s[allow_trusted_devices]" value="0" />', esc_attr($n));
+		printf(
+			'<label><input type="checkbox" name="%1$s[allow_trusted_devices]" value="1" %2$s /> %3$s</label>',
+			esc_attr($n),
+			checked($checked, true, false),
+			esc_html__('Let users skip the code step on remembered browsers after they opt in on the code screen.', 'dual-check-2fa')
+		);
+	}
+
+	/**
+	 * @return void
+	 */
+	public function field_trusted_devices_days(): void {
+		if (!Security::can_access_main_settings()) {
+			return;
+		}
+		$opts = self::clamp_numeric_settings(wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults()));
+		$v    = (int) $opts['trusted_devices_days'];
+		printf(
+			'<input type="number" name="%1$s[trusted_devices_days]" value="%2$d" min="5" max="365" class="small-text" />',
+			esc_attr(self::OPTION_NAME),
+			absint($v)
+		);
+		echo '<p class="description">' . esc_html__('Used when trusted devices are enabled.', 'dual-check-2fa') . '</p>';
+	}
+
+	/**
+	 * @return void
+	 */
+	public function field_token_gc_enabled(): void {
+		if (!Security::can_access_main_settings()) {
+			return;
+		}
+		$opts    = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
+		$checked = !empty($opts['token_gc_enabled']);
+		$n       = self::OPTION_NAME;
+		printf('<input type="hidden" name="%s[token_gc_enabled]" value="0" />', esc_attr($n));
+		printf(
+			'<label><input type="checkbox" name="%1$s[token_gc_enabled]" value="1" %2$s /> %3$s</label>',
+			esc_attr($n),
+			checked($checked, true, false),
+			esc_html__('Run daily cleanup of old rows in the token table (recommended).', 'dual-check-2fa')
+		);
+	}
+
+	/**
+	 * @return void
+	 */
+	public function field_activity_enabled(): void {
+		if (!Security::can_access_main_settings()) {
+			return;
+		}
+		$opts    = wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults());
+		$checked = !empty($opts['activity_enabled']);
+		$n       = self::OPTION_NAME;
+		printf('<input type="hidden" name="%s[activity_enabled]" value="0" />', esc_attr($n));
+		printf(
+			'<label><input type="checkbox" name="%1$s[activity_enabled]" value="1" %2$s /> %3$s</label>',
+			esc_attr($n),
+			checked($checked, true, false),
+			esc_html__('Store security events for the Login Activity screen.', 'dual-check-2fa')
+		);
+	}
+
+	/**
+	 * @return void
+	 */
+	public function field_activity_retention_days(): void {
+		if (!Security::can_access_main_settings()) {
+			return;
+		}
+		$opts = self::clamp_numeric_settings(wp_parse_args(get_option(self::OPTION_NAME, array()), self::defaults()));
+		$v    = (int) $opts['activity_retention_days'];
+		printf(
+			'<input type="number" name="%1$s[activity_retention_days]" value="%2$d" min="1" max="3650" class="small-text" />',
+			esc_attr(self::OPTION_NAME),
+			absint($v)
+		);
+	}
+
+	/**
+	 * @return void
+	 */
+	private function render_test_email_section(): void {
+		if (!Security::can_access_main_settings()) {
+			return;
+		}
+		if (!(bool) apply_filters('dual_check_2fa_general_test_email_enabled', true)) {
+			return;
+		}
+		$user = wp_get_current_user();
+		if (!$user->ID) {
+			return;
+		}
+		$to = sanitize_email((string) $user->user_email);
+
+		echo '<hr />';
+		echo '<h2>' . esc_html__('Send test email', 'dual-check-2fa') . '</h2>';
+		if (!is_email($to)) {
+			echo '<p class="description">' . esc_html__('Your account needs a valid email address to send a test message.', 'dual-check-2fa') . '</p>';
+
+			return;
+		}
+		$url = admin_url('admin-post.php');
+		echo '<form method="post" action="' . esc_url($url) . '">';
+		wp_nonce_field(self::TEST_EMAIL_ACTION, 'dual_check_2fa_test_email_nonce');
+		echo '<input type="hidden" name="action" value="' . esc_attr(self::TEST_EMAIL_ACTION) . '" />';
+		submit_button(__('Send test email', 'dual-check-2fa'), 'secondary', 'submit', false);
+		echo '</form>';
+		echo '<p class="description">' . esc_html__('Sends a simple HTML message to your account email using the same mail path as login codes.', 'dual-check-2fa') . '</p>';
+	}
+
+	/**
+	 * Sends a one-off test email from General → Debugging.
+	 *
+	 * @return void
+	 */
+	public function handle_test_email_general(): void {
+		if (!is_user_logged_in()) {
+			wp_die(esc_html__('You must be logged in.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 403));
+		}
+		if (!Security::can_access_main_settings()) {
+			wp_die(esc_html__('You do not have permission to do this.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 403));
+		}
+		if (!(bool) apply_filters('dual_check_2fa_general_test_email_enabled', true)) {
+			wp_die(esc_html__('This action is disabled.', 'dual-check-2fa'), esc_html__('Error', 'dual-check-2fa'), array('response' => 403));
+		}
+		check_admin_referer(self::TEST_EMAIL_ACTION, 'dual_check_2fa_test_email_nonce');
+
+		$user = wp_get_current_user();
+		$to   = sanitize_email((string) $user->user_email);
+		if (!is_email($to)) {
+			wp_safe_redirect(
+				add_query_arg(
+					array(
+						'page'             => self::MENU_SLUG,
+						'dc2fa_test_sent' => 'fail',
+					),
+					admin_url('admin.php')
+				)
+			);
+			exit;
+		}
+
+		$subject = __('Dual Check 2FA — test email', 'dual-check-2fa');
+		$body    = '<p>' . esc_html__('This is a test message from Dual Check 2FA. If you received it, your mail path is working.', 'dual-check-2fa') . '</p>';
+		$headers = array('Content-Type: text/html; charset=UTF-8');
+		$ok      = get_default_mail_provider()->send($to, $subject, $body, $headers);
+
+		wp_safe_redirect(
+			add_query_arg(
+				array(
+					'page'             => self::MENU_SLUG,
+					'dc2fa_test_sent' => $ok ? 'ok' : 'fail',
+				),
+				admin_url('admin.php')
+			)
+		);
+		exit;
+	}
+
+	/**
 	 * Outputs the General settings form.
 	 *
 	 * @return void
@@ -771,12 +1159,24 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 
 		echo '<div class="wrap"><h1>' . esc_html__('Dual Check 2FA', 'dual-check-2fa') . '</h1>';
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- read-only GET flash set by save handler after redirect.
+		if (isset($_GET['dc2fa_test_sent'])) {
+			$st = sanitize_key((string) wp_unslash($_GET['dc2fa_test_sent']));
+		if ($st === 'ok') {
+			echo '<div class="notice notice-success is-dismissible"><p>' . esc_html__('Test email sent.', 'dual-check-2fa') . '</p></div>';
+		} elseif ($st === 'fail') {
+			echo '<div class="notice notice-error is-dismissible"><p>' . esc_html__('Test email could not be sent.', 'dual-check-2fa') . '</p></div>';
+		}
+		}
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		Settings_Notices::render();
 		Settings_Save_Handler::render_form_open(Settings_Page::MENU_SLUG);
 		printf('<input type="hidden" name="%s[save_context]" value="main" />', esc_attr(Settings_Page::OPTION_NAME));
 		do_settings_sections(Settings_Page::MENU_SLUG);
 		submit_button(__('Save changes', 'dual-check-2fa'));
-		echo '</form></div>';
+		echo '</form>';
+		$this->render_test_email_section();
+		echo '</div>';
 	}
 
 	/**
@@ -807,6 +1207,7 @@ final class Settings_Page implements Admin_Settings_Page {
 			'cap_pool'                     => array('manage_options'),
 			'cap_context_main'             => array('manage_options'),
 			'cap_context_email'          => array('manage_options'),
+			'cap_context_activity'       => array('manage_options'),
 			'mail_custom_provider_enabled' => 0,
 			'mail_provider_id'             => 'wp_mail',
 			Mail_Credentials::SENDGRID_KEY_OPTION   => '',
@@ -814,6 +1215,16 @@ final class Settings_Page implements Admin_Settings_Page {
 			Mail_Credentials::MAILGUN_KEY_OPTION    => '',
 			Mail_Credentials::MAILGUN_DOMAIN_OPTION   => '',
 			Mail_Credentials::MAILGUN_REGION_OPTION   => 'us',
+			'allow_user_exempt'           => 0,
+			'allow_trusted_devices'       => 0,
+			'trusted_devices_days'        => 30,
+			'token_gc_enabled'            => 1,
+			'activity_enabled'            => 1,
+			'activity_retention_days'     => 90,
+			Mail_Credentials::SES_ACCESS_KEY_ID_OPTION       => '',
+			Mail_Credentials::SES_SECRET_ACCESS_KEY_OPTION   => '',
+			Mail_Credentials::SES_REGION_OPTION              => 'us-east-1',
+			Mail_Credentials::SES_CONFIGURATION_SET_OPTION   => '',
 		);
 	}
 
@@ -833,7 +1244,7 @@ final class Settings_Page implements Admin_Settings_Page {
 		}
 		$options['cap_pool'] = $pool;
 
-		foreach (array('cap_context_main', 'cap_context_email') as $key) {
+		foreach (array('cap_context_main', 'cap_context_email', 'cap_context_activity') as $key) {
 			$ctx = isset($options[ $key ]) && is_array($options[ $key ])
 				? Security::normalize_cap_list($options[ $key ])
 				: array();
@@ -890,6 +1301,14 @@ final class Settings_Page implements Admin_Settings_Page {
 			self::CODE_STEP_IP_LOCKOUT_MIN,
 			min(self::CODE_STEP_IP_LOCKOUT_MAX, absint($options['code_step_ip_lockout_seconds'] ?? $d['code_step_ip_lockout_seconds']))
 		);
+		$options['trusted_devices_days'] = max(
+			5,
+			min(365, absint($options['trusted_devices_days'] ?? $d['trusted_devices_days']))
+		);
+		$options['activity_retention_days'] = max(
+			1,
+			min(3650, absint($options['activity_retention_days'] ?? $d['activity_retention_days']))
+		);
 
 		return $options;
 	}
@@ -930,6 +1349,13 @@ final class Settings_Page implements Admin_Settings_Page {
 			$options['code_step_ip_rate_limit_enabled'] = $d['code_step_ip_rate_limit_enabled'];
 		} else {
 			$options['code_step_ip_rate_limit_enabled'] = (int) !empty($options['code_step_ip_rate_limit_enabled']);
+		}
+		foreach (array('allow_user_exempt', 'allow_trusted_devices', 'token_gc_enabled', 'activity_enabled') as $bool_key) {
+			if (!isset($options[ $bool_key ])) {
+				$options[ $bool_key ] = $d[ $bool_key ];
+			} else {
+				$options[ $bool_key ] = (int) !empty($options[ $bool_key ]);
+			}
 		}
 
 		return $options;
