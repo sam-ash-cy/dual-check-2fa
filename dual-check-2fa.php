@@ -2,7 +2,7 @@
 /**
  * Plugin Name: Dual Check 2FA
  * Description: Customisable, easy to use, and secure 2FA plugin for WordPress.
- * Version: 1.1.0
+ * Version: 1.0.0
  * Author: Samuel Ashman
  * Text Domain: dual-check-2fa
  * License: GPLv2 or later
